@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.5"
+        android:scaleY="0.5"
+        android:translateX="27"
+        android:translateY="27">
+        <!-- Heart rate / health icon -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M54,20C48.48,20 44,24.48 44,30c0,8.28 10,18 10,18s10,-9.72 10,-18C64,24.48 59.52,20 54,20zM54,34c-2.21,0 -4,-1.79 -4,-4s1.79,-4 4,-4 4,1.79 4,4 -1.79,4 -4,4z"/>
+        <!-- Fitness/activity ring -->
+        <path
+            android:fillColor="#14B8A6"
+            android:pathData="M54,54m-20,0a20,20 0,1 1,40 0a20,20 0,1 1,-40 0"
+            android:strokeWidth="4"
+            android:strokeColor="#FFFFFF"
+            android:fillAlpha="0"/>
+        <!-- BMR text stylized as icon -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M42,60h4v12h-4z"/>
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M50,60h4l4,8l4,-8h4v12h-4v-6l-4,6l-4,-6v6h-4z"/>
+    </group>
+</vector>
