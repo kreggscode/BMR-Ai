@@ -12,6 +12,9 @@ interface UserDao {
     @Query("SELECT * FROM user_profiles ORDER BY updatedAt DESC LIMIT 1")
     fun getCurrentUser(): Flow<UserProfile?>
     
+    @Query("SELECT * FROM user_profiles ORDER BY updatedAt DESC")
+    fun getAllUsers(): Flow<List<UserProfile>>
+    
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: UserProfile): Long
     

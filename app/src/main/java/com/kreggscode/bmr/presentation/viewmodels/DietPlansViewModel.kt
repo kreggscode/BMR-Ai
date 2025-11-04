@@ -4,8 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kreggscode.bmr.data.api.PollinationsAIService
 import com.kreggscode.bmr.data.local.dao.BMRDao
+import com.kreggscode.bmr.data.local.dao.DietPlanDao
 import com.kreggscode.bmr.data.local.dao.UserDao
+import com.kreggscode.bmr.data.local.entities.DietPlan
 import dagger.hilt.android.lifecycle.HiltViewModel
+import org.json.JSONObject
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -14,6 +17,7 @@ import javax.inject.Inject
 class DietPlansViewModel @Inject constructor(
     private val userDao: UserDao,
     private val bmrDao: BMRDao,
+    private val dietPlanDao: DietPlanDao,
     private val aiService: PollinationsAIService
 ) : ViewModel() {
     
@@ -110,19 +114,78 @@ class DietPlansViewModel @Inject constructor(
             
             try {
                 val state = _uiState.value
-                val dietTypeDescription = when (state.selectedPlanType) {
-                    DietPlanType.WEIGHT_LOSS -> "weight loss with calorie deficit"
-                    DietPlanType.MUSCLE_GAIN -> "muscle gain with calorie surplus and high protein"
-                    DietPlanType.MAINTENANCE -> "weight maintenance with balanced nutrition"
-                    DietPlanType.KETO -> "ketogenic diet (low carb, high fat, under 50g carbs daily)"
-                    DietPlanType.VEGETARIAN -> "vegetarian diet (no meat, includes dairy and eggs)"
-                    DietPlanType.VEGAN -> "vegan diet (plant-based, no animal products)"
+                val (dietTypeDescription, specificInstructions) = when (state.selectedPlanType) {
+                    DietPlanType.WEIGHT_LOSS -> Pair(
+                        "weight loss with calorie deficit",
+                        """Create a WEIGHT LOSS meal plan with:
+                        - ${state.targetCalories.toInt()} calories (deficit for fat loss)
+                        - High protein (${state.proteinGrams.toInt()}g) to preserve muscle
+                        - Moderate carbs, low fat
+                        - 5-6 small meals to boost metabolism
+                        - Focus on lean proteins, vegetables, whole grains
+                        - Include fat-burning foods like green tea, chili peppers
+                        - Emphasize portion control and meal timing"""
+                    )
+                    DietPlanType.MUSCLE_GAIN -> Pair(
+                        "muscle gain with calorie surplus and high protein",
+                        """Create a MUSCLE BUILDING meal plan with:
+                        - ${state.targetCalories.toInt()} calories (surplus for muscle growth)
+                        - Very high protein (${state.proteinGrams.toInt()}g) for muscle synthesis
+                        - High carbs for energy and recovery
+                        - 6-7 meals including pre/post workout nutrition
+                        - Focus on chicken, beef, fish, eggs, protein shakes
+                        - Include complex carbs: rice, oats, sweet potato
+                        - Emphasize meal timing around workouts"""
+                    )
+                    DietPlanType.MAINTENANCE -> Pair(
+                        "weight maintenance with balanced nutrition",
+                        """Create a MAINTENANCE meal plan with:
+                        - ${state.targetCalories.toInt()} calories (balanced for maintenance)
+                        - Balanced macros: ${state.proteinGrams.toInt()}g protein, ${state.carbsGrams.toInt()}g carbs, ${state.fatGrams.toInt()}g fat
+                        - 3-4 regular meals
+                        - Variety of food groups for optimal health
+                        - Focus on sustainable, enjoyable eating
+                        - Include all food groups in moderation"""
+                    )
+                    DietPlanType.KETO -> Pair(
+                        "ketogenic diet (low carb, high fat, under 50g carbs daily)",
+                        """Create a KETOGENIC meal plan with:
+                        - ${state.targetCalories.toInt()} calories
+                        - VERY LOW CARBS: Under 50g daily (5-10% of calories)
+                        - HIGH FAT: 70-75% of calories from healthy fats
+                        - MODERATE PROTEIN: 20-25% of calories
+                        - Focus on: fatty meats, fish, eggs, cheese, butter, oils, avocado
+                        - Avoid: grains, sugar, most fruits, starchy vegetables
+                        - Include MCT oil, coconut oil for ketone production"""
+                    )
+                    DietPlanType.VEGETARIAN -> Pair(
+                        "vegetarian diet (no meat, includes dairy and eggs)",
+                        """Create a VEGETARIAN meal plan with:
+                        - ${state.targetCalories.toInt()} calories
+                        - ${state.proteinGrams.toInt()}g protein from plant sources, dairy, eggs
+                        - NO MEAT OR FISH
+                        - Focus on: tofu, tempeh, legumes, eggs, dairy, nuts, seeds
+                        - Include complete protein combinations
+                        - Ensure B12, iron, and omega-3 sources
+                        - Variety of colorful vegetables and whole grains"""
+                    )
+                    DietPlanType.VEGAN -> Pair(
+                        "vegan diet (plant-based, no animal products)",
+                        """Create a VEGAN meal plan with:
+                        - ${state.targetCalories.toInt()} calories
+                        - ${state.proteinGrams.toInt()}g protein from plant sources only
+                        - NO ANIMAL PRODUCTS (no meat, dairy, eggs, honey)
+                        - Focus on: tofu, tempeh, seitan, legumes, nuts, seeds
+                        - Include B12 supplement recommendation
+                        - Complete protein combinations (beans + rice, etc.)
+                        - Variety of plant-based whole foods"""
+                    )
                 }
                 
                 val result = aiService.generateDietPlan(
                     bmr = state.bmr,
                     goal = state.goal,
-                    dietType = dietTypeDescription
+                    dietType = specificInstructions
                 )
                 
                 result.onSuccess { plan ->
@@ -160,6 +223,54 @@ class DietPlansViewModel @Inject constructor(
     
     fun closePlan() {
         _uiState.update { it.copy(generatedPlan = "") }
+    }
+    
+    fun savePlan() {
+        viewModelScope.launch {
+            val user = userDao.getCurrentUser().firstOrNull() ?: return@launch
+            val state = _uiState.value
+            
+            if (state.generatedPlan.isNotEmpty()) {
+                // Deactivate all existing plans
+                dietPlanDao.deactivateAllPlans(user.id)
+                
+                // Create JSON for days (simplified - store plan as single day structure)
+                val daysJson = JSONObject().apply {
+                    put("plan", state.generatedPlan)
+                    put("planType", state.selectedPlanType.name)
+                }.toString()
+                
+                // Create macros JSON
+                val macrosJson = JSONObject().apply {
+                    put("protein", state.proteinGrams)
+                    put("carbs", state.carbsGrams)
+                    put("fat", state.fatGrams)
+                }.toString()
+                
+                // Create shopping list JSON
+                val shoppingListJson = JSONObject(state.shoppingList).toString()
+                
+                val dietPlan = DietPlan(
+                    userId = user.id,
+                    name = "${state.selectedPlanType.displayName} Plan",
+                    daysJson = daysJson,
+                    totalCalories = state.targetCalories,
+                    macrosJson = macrosJson,
+                    dietaryPreferences = state.selectedPlanType.name,
+                    shoppingListJson = shoppingListJson,
+                    isActive = true
+                )
+                
+                dietPlanDao.insertDietPlan(dietPlan)
+                
+                _uiState.update { 
+                    it.copy(
+                        showPlanDialog = false,
+                        saveSuccess = true
+                    )
+                }
+            }
+        }
     }
     
     private fun getDefaultPlan(planType: DietPlanType): String {
@@ -371,7 +482,8 @@ data class DietPlansUiState(
     val generatedPlan: String = "",
     val isGenerating: Boolean = false,
     val showPlanDialog: Boolean = false,
-    val shoppingList: Map<String, List<String>> = emptyMap()
+    val shoppingList: Map<String, List<String>> = emptyMap(),
+    val saveSuccess: Boolean = false
 )
 
 enum class DietPlanType(val displayName: String) {

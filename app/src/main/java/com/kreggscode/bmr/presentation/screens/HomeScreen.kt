@@ -30,6 +30,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import com.kreggscode.bmr.Screen
 import com.kreggscode.bmr.presentation.viewmodels.HomeViewModel
+import com.kreggscode.bmr.presentation.viewmodels.SettingsViewModel
 import com.kreggscode.bmr.ui.components.*
 import com.kreggscode.bmr.ui.theme.*
 import java.text.SimpleDateFormat
@@ -60,7 +61,8 @@ fun HomeScreen(
             // Header
             HomeHeader(
                 userName = uiState.userName,
-                onSettingsClick = { navController.navigate(Screen.Settings.route) }
+                onSettingsClick = { navController.navigate(Screen.Settings.route) },
+                viewModel = viewModel
             )
             
             Spacer(modifier = Modifier.height(24.dp))
@@ -81,17 +83,18 @@ fun HomeScreen(
                 caloriesConsumed = uiState.caloriesConsumed,
                 caloriesRemaining = uiState.caloriesRemaining,
                 waterIntake = uiState.waterIntake,
-                onWaterIncrement = { viewModel.showWaterDialog(true) }
+                onWaterIncrement = { navController.navigate(Screen.WaterTracking.route) },
+                navController = navController
             )
             
-            // Water Dialog
-            if (uiState.showWaterDialog) {
-                WaterIntakeDialog(
-                    onDismiss = { viewModel.showWaterDialog(false) },
-                    onAddWater = { glassSize -> viewModel.addWater(glassSize) },
-                    onReset = { viewModel.resetWater() }
-                )
-            }
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Calorie Tracker Graph
+            CalorieTrackerCard(
+                targetCalories = uiState.targetCalories,
+                consumed = uiState.caloriesConsumed,
+                remaining = uiState.caloriesRemaining
+            )
             
             Spacer(modifier = Modifier.height(24.dp))
             
@@ -117,8 +120,12 @@ fun HomeScreen(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Recent Meals
-            if (uiState.recentMeals.isNotEmpty()) {
+            // Recent Meals Section
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = "Recent Meals",
                     style = MaterialTheme.typography.headlineSmall,
@@ -126,13 +133,61 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.onBackground
                 )
                 
-                Spacer(modifier = Modifier.height(16.dp))
-                
+                TextButton(
+                    onClick = { navController.navigate(Screen.FoodLogs.route) }
+                ) {
+                    Text(
+                        text = "View All",
+                        color = PrimaryTeal
+                    )
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = PrimaryTeal,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            if (uiState.recentMeals.isNotEmpty()) {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(uiState.recentMeals) { meal ->
                         MealCard(meal = meal)
+                    }
+                }
+            } else {
+                GlassmorphicCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    cornerRadius = 20.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Restaurant,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "No meals logged today",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { navController.navigate(Screen.Scanner.route) }
+                        ) {
+                            Text("Log Your First Meal")
+                        }
                     }
                 }
             }
@@ -143,9 +198,14 @@ fun HomeScreen(
 @Composable
 private fun HomeHeader(
     userName: String,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    viewModel: HomeViewModel
 ) {
     val currentDate = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
+    
+    // Get theme preferences directly
+    val themeViewModel: SettingsViewModel = hiltViewModel()
+    val darkModeState by themeViewModel.isDarkMode.collectAsState(initial = false)
     
     Row(
         modifier = Modifier
@@ -173,25 +233,53 @@ private fun HomeHeader(
             )
         }
         
-        IconButton(
-            onClick = onSettingsClick,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(
-                    brush = Brush.linearGradient(
-                        colors = listOf(
-                            PrimaryIndigo.copy(alpha = 0.1f),
-                            PrimaryPurple.copy(alpha = 0.1f)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Dark/Light Mode Toggle
+            IconButton(
+                onClick = { themeViewModel.toggleDarkMode(!darkModeState) },
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                PrimaryTeal.copy(alpha = 0.1f),
+                                AccentSky.copy(alpha = 0.1f)
+                            )
                         )
                     )
+            ) {
+                Icon(
+                    imageVector = if (darkModeState) Icons.Default.LightMode else Icons.Default.DarkMode,
+                    contentDescription = if (darkModeState) "Light Mode" else "Dark Mode",
+                    tint = if (darkModeState) Warning else PrimaryTeal
                 )
-        ) {
-            Icon(
-                imageVector = Icons.Default.Settings,
-                contentDescription = "Settings",
-                tint = PrimaryIndigo
-            )
+            }
+            
+            // Settings Button
+            IconButton(
+                onClick = onSettingsClick,
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                PrimaryIndigo.copy(alpha = 0.1f),
+                                PrimaryPurple.copy(alpha = 0.1f)
+                            )
+                        )
+                    )
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "Settings",
+                    tint = PrimaryIndigo
+                )
+            }
         }
     }
 }
@@ -202,7 +290,8 @@ private fun StatsGrid(
     caloriesConsumed: Double,
     caloriesRemaining: Double,
     waterIntake: Int,
-    onWaterIncrement: () -> Unit
+    onWaterIncrement: () -> Unit,
+    navController: NavController
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
@@ -251,7 +340,7 @@ private fun StatsGrid(
             StatCard(
                 title = "Remaining",
                 value = "${caloriesRemaining.toInt()}",
-                subtitle = "kcal",
+                subtitle = "kcal\n(TDEE - Consumed)",
                 icon = {
                     Icon(
                         Icons.Default.BatteryStd,
@@ -262,7 +351,7 @@ private fun StatsGrid(
                 },
                 modifier = Modifier.weight(1f),
                 gradientColors = listOf(PrimaryIndigo, PrimaryPurple),
-                maxLines = 1
+                maxLines = 2
             )
             
             StatCard(
@@ -283,6 +372,125 @@ private fun StatsGrid(
                 ) { onWaterIncrement() },
                 gradientColors = listOf(AccentSky, PrimaryTeal),
                 maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun CalorieTrackerCard(
+    targetCalories: Double,
+    consumed: Double,
+    remaining: Double
+) {
+    val progress: Float = if (targetCalories > 0) {
+        (consumed / targetCalories).toFloat().coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    
+    GlassmorphicCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Calorie Tracker",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "${(progress * 100).toInt()}%",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryTeal
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Progress bar
+            val progressColor: Color = when {
+                progress < 0.5f -> Success
+                progress < 0.8f -> Warning
+                progress < 1.0f -> AccentCoral
+                else -> Error
+            }
+            
+            LinearProgressIndicator(
+                progress = progress,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(8.dp)),
+                color = progressColor,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Stats
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${consumed.toInt()}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryTeal
+                    )
+                    Text(
+                        text = "Consumed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${remaining.toInt()}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = if (remaining > 0) Success else Error
+                    )
+                    Text(
+                        text = "Remaining",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "${targetCalories.toInt()}",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryIndigo
+                    )
+                    Text(
+                        text = "Target (TDEE)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Remaining = Target (TDEE) - Consumed",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -323,6 +531,14 @@ private fun QuickActionButtons(navController: NavController) {
                 label = "AI Analysis",
                 gradientColors = listOf(PrimaryPurple, PrimaryPink),
                 onClick = { navController.navigate(Screen.Chat.route) }
+            )
+        }
+        item {
+            QuickActionCard(
+                icon = Icons.Default.Bedtime,
+                label = "Sleep",
+                gradientColors = listOf(PrimaryIndigo, PrimaryPurple),
+                onClick = { navController.navigate(Screen.SleepTracking.route) }
             )
         }
     }

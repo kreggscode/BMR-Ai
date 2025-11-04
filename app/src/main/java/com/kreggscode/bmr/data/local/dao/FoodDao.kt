@@ -19,6 +19,9 @@ interface FoodDao {
     @Query("SELECT * FROM food_items WHERE barcode = :barcode")
     suspend fun getFoodItemByBarcode(barcode: String): FoodItem?
     
+    @Query("SELECT * FROM meal_entries WHERE id = :mealId")
+    suspend fun getMealEntryById(mealId: Long): MealEntry?
+    
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFoodItem(foodItem: FoodItem): Long
     
@@ -62,4 +65,10 @@ interface FoodDao {
     
     @Query("DELETE FROM meal_entries WHERE userId = :userId AND date = :date")
     suspend fun deleteMealsByDate(userId: Long, date: Long)
+    
+    @Query("DELETE FROM meal_entries WHERE userId = :userId")
+    suspend fun deleteMealEntriesForUser(userId: Long)
+    
+    @Query("DELETE FROM food_items")
+    suspend fun deleteAllFoodItems()
 }

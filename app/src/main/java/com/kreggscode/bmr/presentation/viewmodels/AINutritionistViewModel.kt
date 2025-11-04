@@ -1,5 +1,6 @@
 package com.kreggscode.bmr.presentation.viewmodels
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.kreggscode.bmr.data.local.dao.BMRDao
@@ -7,6 +8,7 @@ import com.kreggscode.bmr.data.local.dao.UserDao
 import com.kreggscode.bmr.data.remote.api.PollinationsApi
 import com.kreggscode.bmr.data.remote.dto.ChatRequest
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -19,7 +21,8 @@ import javax.inject.Inject
 class AINutritionistViewModel @Inject constructor(
     private val userDao: UserDao,
     private val bmrDao: BMRDao,
-    private val aiService: com.kreggscode.bmr.data.api.PollinationsAIService
+    private val aiService: com.kreggscode.bmr.data.api.PollinationsAIService,
+    @ApplicationContext private val context: android.content.Context
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -200,13 +203,98 @@ class AINutritionistViewModel @Inject constructor(
             state.copy(messages = emptyList())
         }
     }
+    
+    fun sendMessageWithImage(message: String, imageUri: Uri?) {
+        if (message.isBlank() && imageUri == null) return
+        
+        // Add user message
+        val displayMessage = if (imageUri != null) {
+            "$message 📷 [Image attached]"
+        } else {
+            message
+        }
+        
+        val userMessage = ChatMessage(
+            content = displayMessage,
+            isUser = true,
+            timestamp = getCurrentTimestamp()
+        )
+        
+        _uiState.update { state ->
+            state.copy(
+                messages = state.messages + userMessage,
+                isTyping = true
+            )
+        }
+        
+        // Send to AI with image analysis
+        viewModelScope.launch {
+            try {
+                val aiResponse = if (imageUri != null) {
+                    // Use vision API to analyze the image
+                    val prompt = if (message.isNotBlank()) {
+                        message
+                    } else {
+                        "Analyze this food image and provide detailed nutritional information. Identify all food items, estimate portion sizes, and provide calorie counts and macronutrient breakdown."
+                    }
+                    
+                    val result = aiService.analyzeFoodImage(prompt, imageUri, context)
+                    result.fold(
+                        onSuccess = { analysis -> analysis },
+                        onFailure = { error -> 
+                            "I can see you've shared an image. I encountered an error analyzing it: ${error.message}. Please try again or describe what's in the image."
+                        }
+                    )
+                } else {
+                    // Regular text message
+                    getAIResponse(message)
+                }
+                
+                val aiMessage = ChatMessage(
+                    content = aiResponse,
+                    isUser = false,
+                    timestamp = getCurrentTimestamp()
+                )
+                
+                _uiState.update { state ->
+                    state.copy(
+                        messages = state.messages + aiMessage,
+                        isTyping = false
+                    )
+                }
+                
+                saveToHistory(userMessage, aiMessage)
+                
+            } catch (e: Exception) {
+                val fallbackMessage = ChatMessage(
+                    content = "I encountered an error analyzing your image. Please try again or describe what's in the picture. Error: ${e.message}",
+                    isUser = false,
+                    timestamp = getCurrentTimestamp()
+                )
+                
+                _uiState.update { state ->
+                    state.copy(
+                        messages = state.messages + fallbackMessage,
+                        isTyping = false
+                    )
+                }
+            }
+        }
+    }
+    
+    fun sendVoiceMessage(transcribedText: String) {
+        if (transcribedText.isBlank()) return
+        sendMessage(transcribedText)
+    }
 }
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val isTyping: Boolean = false,
     val userContext: UserContext? = null,
-    val error: String? = null
+    val error: String? = null,
+    val isRecording: Boolean = false,
+    val attachedImageUri: Uri? = null
 )
 
 data class ChatMessage(

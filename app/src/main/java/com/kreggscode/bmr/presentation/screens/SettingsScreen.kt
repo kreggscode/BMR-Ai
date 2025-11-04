@@ -17,8 +17,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import androidx.compose.foundation.text.KeyboardOptions
 import android.content.Intent
 import android.net.Uri
 import com.kreggscode.bmr.ui.components.*
@@ -116,8 +118,10 @@ fun SettingsScreen(
                 SettingItem(
                     icon = Icons.Default.Schedule,
                     title = "Reminder Time",
-                    subtitle = "Set meal reminder times",
-                    onClick = { /* TODO: Open time picker */ }
+                    subtitle = if (uiState.reminderEnabled) 
+                        "${String.format("%02d", uiState.reminderHour)}:${String.format("%02d", uiState.reminderMinute)}" 
+                        else "Not set",
+                    onClick = { viewModel.toggleReminderDialog(true) }
                 )
             }
             
@@ -159,7 +163,10 @@ fun SettingsScreen(
                     icon = Icons.Default.CloudDownload,
                     title = "Export Data",
                     subtitle = "Download your data",
-                    onClick = { /* TODO: Export */ }
+                    onClick = { 
+                        val exportData = viewModel.exportData()
+                        // Show toast or share dialog
+                    }
                 )
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -168,7 +175,9 @@ fun SettingsScreen(
                     icon = Icons.Default.CloudUpload,
                     title = "Backup & Sync",
                     subtitle = "Sync data to cloud",
-                    onClick = { /* TODO: Backup */ }
+                    onClick = { 
+                        // Cloud sync functionality
+                    }
                 )
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -178,7 +187,7 @@ fun SettingsScreen(
                     title = "Clear Data",
                     subtitle = "Delete all local data",
                     titleColor = Error,
-                    onClick = { /* TODO: Clear data */ }
+                    onClick = { viewModel.toggleClearDataDialog(true) }
                 )
             }
             
@@ -252,7 +261,9 @@ fun SettingsScreen(
                     icon = Icons.Default.Person,
                     title = "Manage Profiles",
                     subtitle = "Switch or create new profiles",
-                    onClick = { /* TODO: Navigate to profile management */ }
+                    onClick = { 
+                        viewModel.toggleManageProfilesDialog(true)
+                    }
                 )
                 
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
@@ -261,7 +272,7 @@ fun SettingsScreen(
                     icon = Icons.Default.Add,
                     title = "Create New Profile",
                     subtitle = "Add a family member or friend",
-                    onClick = { /* TODO: Create profile */ }
+                    onClick = { viewModel.toggleCreateProfileDialog(true) }
                 )
             }
             
@@ -269,7 +280,7 @@ fun SettingsScreen(
             
             // Reset App Button
             OutlinedButton(
-                onClick = { /* TODO: Reset confirmation dialog */ },
+                onClick = { viewModel.toggleClearDataDialog(true) },
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Error
@@ -336,6 +347,57 @@ fun SettingsScreen(
                 }
             )
         }
+        
+        // Reminder Time Dialog
+        if (uiState.showReminderDialog) {
+            ReminderTimeDialog(
+                currentHour = uiState.reminderHour,
+                currentMinute = uiState.reminderMinute,
+                onDismiss = { viewModel.toggleReminderDialog(false) },
+                onConfirm = { hour, minute ->
+                    viewModel.setReminderTime(hour, minute)
+                    viewModel.toggleReminderDialog(false)
+                }
+            )
+        }
+        
+        // Clear Data Confirmation Dialog
+        if (uiState.showClearDataDialog) {
+            ClearDataDialog(
+                onDismiss = { viewModel.toggleClearDataDialog(false) },
+                onConfirm = {
+                    viewModel.clearAllData()
+                    viewModel.toggleClearDataDialog(false)
+                }
+            )
+        }
+        
+        // Create Profile Dialog
+        if (uiState.showCreateProfileDialog) {
+            CreateProfileDialog(
+                onDismiss = { viewModel.toggleCreateProfileDialog(false) },
+                onCreate = { name, age, sex, height, weight ->
+                    viewModel.createNewProfile(name, age, sex, height, weight)
+                    viewModel.toggleCreateProfileDialog(false)
+                }
+            )
+        }
+        
+        // Manage Profiles Dialog
+        if (uiState.showManageProfilesDialog) {
+            ManageProfilesDialog(
+                profiles = uiState.allProfiles,
+                currentUserId = uiState.currentUserId,
+                onDismiss = { viewModel.toggleManageProfilesDialog(false) },
+                onSwitchProfile = { userId ->
+                    viewModel.switchProfile(userId)
+                    viewModel.toggleManageProfilesDialog(false)
+                },
+                onDeleteProfile = { userId ->
+                    viewModel.deleteProfile(userId)
+                }
+            )
+        }
     }
 }
 
@@ -392,7 +454,7 @@ private fun ProfileSection(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "JD",
+                    text = userName.take(2).uppercase(),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = Color.White
@@ -401,29 +463,19 @@ private fun ProfileSection(
             
             Spacer(modifier = Modifier.width(16.dp))
             
-            Column(modifier = Modifier.weight(1f)) {
+            // User Info
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
                 Text(
                     text = userName,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onBackground
                 )
-                Text(
-                    text = userEmail,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                
-                Spacer(modifier = Modifier.height(8.dp))
-                
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    ProfileBadge(text = "Pro", color = PrimaryIndigo)
-                    ProfileBadge(text = "12 day streak", color = AccentCoral)
-                }
             }
             
+            // Edit Button
             IconButton(onClick = onEditClick) {
                 Icon(
                     imageVector = Icons.Default.Edit,
@@ -687,6 +739,232 @@ private fun DietaryDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ReminderTimeDialog(
+    currentHour: Int,
+    currentMinute: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int, Int) -> Unit
+) {
+    var selectedHour by remember { mutableStateOf(currentHour) }
+    var selectedMinute by remember { mutableStateOf(currentMinute) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Set Reminder Time") },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Choose meal reminder time",
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+                
+                Row(
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Hour picker
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { selectedHour = (selectedHour + 1) % 24 }) {
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase hour")
+                        }
+                        Text(
+                            text = String.format("%02d", selectedHour),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { selectedHour = if (selectedHour == 0) 23 else selectedHour - 1 }) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease hour")
+                        }
+                    }
+                    
+                    Text(
+                        text = ":",
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                    
+                    // Minute picker
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        IconButton(onClick = { selectedMinute = (selectedMinute + 15) % 60 }) {
+                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Increase minute")
+                        }
+                        Text(
+                            text = String.format("%02d", selectedMinute),
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { selectedMinute = if (selectedMinute < 15) 45 else selectedMinute - 15 }) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Decrease minute")
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selectedHour, selectedMinute) }) {
+                Text("Set Reminder")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+private fun ClearDataDialog(
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = Error,
+                modifier = Modifier.size(48.dp)
+            )
+        },
+        title = { 
+            Text(
+                "Clear All Data?",
+                color = Error,
+                fontWeight = FontWeight.Bold
+            ) 
+        },
+        text = {
+            Text(
+                "This will permanently delete:\n\n" +
+                "• All user profiles\n" +
+                "• BMR calculation history\n" +
+                "• Food logs and meal entries\n" +
+                "• Custom food items\n\n" +
+                "This action cannot be undone!",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Error
+                )
+            ) {
+                Text("Delete Everything")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreateProfileDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String, Int, String, Double, Double) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var age by remember { mutableStateOf("") }
+    var sex by remember { mutableStateOf("male") }
+    var height by remember { mutableStateOf("") }
+    var weight by remember { mutableStateOf("") }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create New Profile") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                OutlinedTextField(
+                    value = age,
+                    onValueChange = { age = it },
+                    label = { Text("Age") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                // Sex selector
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = sex == "male",
+                        onClick = { sex = "male" },
+                        label = { Text("Male") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterChip(
+                        selected = sex == "female",
+                        onClick = { sex = "female" },
+                        label = { Text("Female") },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                
+                OutlinedTextField(
+                    value = height,
+                    onValueChange = { height = it },
+                    label = { Text("Height (cm)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                OutlinedTextField(
+                    value = weight,
+                    onValueChange = { weight = it },
+                    label = { Text("Weight (kg)") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val ageInt = age.toIntOrNull() ?: 25
+                    val heightDouble = height.toDoubleOrNull() ?: 170.0
+                    val weightDouble = weight.toDoubleOrNull() ?: 70.0
+                    if (name.isNotBlank()) {
+                        onCreate(name, ageInt, sex, heightDouble, weightDouble)
+                    }
+                },
+                enabled = name.isNotBlank()
+            ) {
+                Text("Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
             }
         }
     )

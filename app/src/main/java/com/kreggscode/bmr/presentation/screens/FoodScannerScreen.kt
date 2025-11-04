@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -109,21 +110,30 @@ private fun CameraView(viewModel: FoodScannerViewModel) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     
-    val preview = Preview.Builder().build()
+    val preview = remember { Preview.Builder().build() }
     val previewView = remember { PreviewView(context) }
     val imageCapture = remember { ImageCapture.Builder().build() }
-    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    val cameraSelector = remember { CameraSelector.DEFAULT_BACK_CAMERA }
     
-    LaunchedEffect(Unit) {
-        val cameraProvider = ProcessCameraProvider.getInstance(context).get()
-        cameraProvider.unbindAll()
-        cameraProvider.bindToLifecycle(
-            lifecycleOwner,
-            cameraSelector,
-            preview,
-            imageCapture
-        )
-        preview.setSurfaceProvider(previewView.surfaceProvider)
+    DisposableEffect(Unit) {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        var cameraProvider: ProcessCameraProvider? = null
+        
+        cameraProviderFuture.addListener({
+            cameraProvider = cameraProviderFuture.get()
+            cameraProvider?.unbindAll()
+            cameraProvider?.bindToLifecycle(
+                lifecycleOwner,
+                cameraSelector,
+                preview,
+                imageCapture
+            )
+            preview.setSurfaceProvider(previewView.surfaceProvider)
+        }, ContextCompat.getMainExecutor(context))
+        
+        onDispose {
+            cameraProvider?.unbindAll()
+        }
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
@@ -437,32 +447,117 @@ private fun ManualFoodEntry(viewModel: FoodScannerViewModel) {
 
 @Composable
 private fun BarcodeScanner(viewModel: FoodScannerViewModel) {
-    // Similar to CameraView but with barcode scanning
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    
+    val preview = remember { Preview.Builder().build() }
+    val previewView = remember { PreviewView(context) }
+    val imageCapture = remember { ImageCapture.Builder().build() }
+    val cameraSelector = remember { CameraSelector.DEFAULT_BACK_CAMERA }
+    
+    DisposableEffect(Unit) {
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        var cameraProvider: ProcessCameraProvider? = null
+        
+        cameraProviderFuture.addListener({
+            cameraProvider = cameraProviderFuture.get()
+            try {
+                cameraProvider?.unbindAll()
+                cameraProvider?.bindToLifecycle(
+                    lifecycleOwner,
+                    cameraSelector,
+                    preview,
+                    imageCapture
+                )
+                preview.setSurfaceProvider(previewView.surfaceProvider)
+            } catch (e: Exception) {
+                // Handle error
+            }
+        }, ContextCompat.getMainExecutor(context))
+        
+        onDispose {
+            cameraProvider?.unbindAll()
+        }
+    }
+    
+    Box(modifier = Modifier.fillMaxSize()) {
+        AndroidView(
+            factory = { previewView },
+            modifier = Modifier.fillMaxSize()
+        )
+        
+        // Barcode Overlay
+        Box(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.QrCodeScanner,
-                contentDescription = null,
-                tint = PrimaryIndigo,
-                modifier = Modifier.size(100.dp)
+            // Scanning frame
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth(0.8f)
+                    .aspectRatio(1f)
+                    .border(
+                        width = 3.dp,
+                        brush = Brush.linearGradient(
+                            colors = listOf(PrimaryTeal, PrimaryIndigo, PrimaryPurple)
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    )
             )
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                text = "Barcode Scanner",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Text(
-                text = "Coming soon",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            
+            // Instruction text
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 150.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(
+                    imageVector = Icons.Default.QrCodeScanner,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Scan product barcode",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    modifier = Modifier
+                        .background(
+                            Color.Black.copy(alpha = 0.6f),
+                            RoundedCornerShape(20.dp)
+                        )
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                )
+            }
+        }
+        
+        // Capture Button for manual barcode capture
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 50.dp)
+        ) {
+            CaptureButton(
+                onClick = {
+                    val photoFile = File(context.cacheDir, "barcode_${System.currentTimeMillis()}.jpg")
+                    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
+                    
+                    imageCapture.takePicture(
+                        outputOptions,
+                        ContextCompat.getMainExecutor(context),
+                        object : ImageCapture.OnImageSavedCallback {
+                            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                                viewModel.processBarcode(Uri.fromFile(photoFile))
+                            }
+                            
+                            override fun onError(exception: ImageCaptureException) {
+                                // Handle error
+                            }
+                        }
+                    )
+                }
             )
         }
     }
@@ -812,30 +907,148 @@ private fun ModeButton(
 
 @Composable
 private fun LoadingOverlay() {
+    val infiniteTransition = rememberInfiniteTransition()
+    
+    // Pulsing animation for scanning effect
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.2f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+    
+    // Rotating animation
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+    
+    // Scanning line animation
+    val scanLineOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 100f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Restart
+        )
+    )
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.7f)),
+            .background(Color.Black.copy(alpha = 0.85f)),
         contentAlignment = Alignment.Center
     ) {
         Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
         ) {
-            CircularProgressIndicator(
-                color = PrimaryTeal,
-                modifier = Modifier.size(48.dp)
-            )
-            Spacer(modifier = Modifier.height(16.dp))
+            // Animated scanning icon
+            Box(
+                modifier = Modifier
+                    .size(120.dp)
+                    .scale(scale),
+                contentAlignment = Alignment.Center
+            ) {
+                // Outer rotating ring
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .graphicsLayer { rotationZ = rotation }
+                        .clip(CircleShape)
+                        .border(
+                            width = 4.dp,
+                            brush = Brush.sweepGradient(
+                                colors = listOf(
+                                    PrimaryTeal,
+                                    AccentSky,
+                                    PrimaryTeal.copy(alpha = 0.3f)
+                                )
+                            ),
+                            shape = CircleShape
+                        )
+                )
+                
+                // Inner pulsing circle
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(
+                            brush = Brush.radialGradient(
+                                colors = listOf(
+                                    PrimaryTeal.copy(alpha = 0.8f),
+                                    AccentSky.copy(alpha = 0.3f),
+                                    Color.Transparent
+                                )
+                            )
+                        )
+                )
+                
+                // Center icon
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(40.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(32.dp))
+            
+            // Scanning text with animation
             Text(
-                text = "Analyzing food...",
-                style = MaterialTheme.typography.bodyLarge,
+                text = "🔍 Scanning Food...",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
                 color = Color.White
             )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "AI is analyzing your food image",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.8f)
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
             Text(
                 text = "Powered by Pollinations AI",
                 style = MaterialTheme.typography.bodySmall,
-                color = PrimaryPurple
+                color = PrimaryPurple.copy(alpha = 0.9f)
             )
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            // Progress dots
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                repeat(3) { index ->
+                    val dotAlpha by infiniteTransition.animateFloat(
+                        initialValue = 0.3f,
+                        targetValue = 1f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(600, easing = FastOutSlowInEasing, delayMillis = index * 200),
+                            repeatMode = RepeatMode.Reverse
+                        )
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(12.dp)
+                            .clip(CircleShape)
+                            .background(PrimaryTeal.copy(alpha = dotAlpha))
+                    )
+                }
+            }
         }
     }
 }

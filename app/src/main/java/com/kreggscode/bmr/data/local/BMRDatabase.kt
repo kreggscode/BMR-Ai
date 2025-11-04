@@ -11,15 +11,20 @@ import com.kreggscode.bmr.data.local.entities.*
         BMRRecord::class,
         FoodItem::class,
         MealEntry::class,
-        DietPlan::class
+        DietPlan::class,
+        SleepRecord::class,
+        WaterIntake::class
     ],
-    version = 2,
+    version = 4,
     exportSchema = false
 )
 abstract class BMRDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun bmrDao(): BMRDao
     abstract fun foodDao(): FoodDao
+    abstract fun dietPlanDao(): DietPlanDao
+    abstract fun sleepDao(): SleepDao
+    abstract fun waterDao(): WaterDao
     
     companion object {
         const val DATABASE_NAME = "bmr_database"

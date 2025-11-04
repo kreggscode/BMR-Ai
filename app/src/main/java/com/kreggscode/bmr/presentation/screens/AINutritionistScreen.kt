@@ -1,6 +1,9 @@
 package com.kreggscode.bmr.presentation.screens
 
+import android.net.Uri
 import android.speech.tts.TextToSpeech
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -40,6 +43,7 @@ import com.kreggscode.bmr.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Locale
+import androidx.activity.ComponentActivity
 
 @Composable
 fun AINutritionistScreen(
@@ -170,6 +174,7 @@ fun AINutritionistScreen(
                         }
                     },
                     isLoading = uiState.isTyping,
+                    viewModel = viewModel,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
@@ -196,18 +201,24 @@ private fun ChatHeader(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
+            // Back button separated from content
+            IconButton(
+                onClick = onBackClick,
+                modifier = Modifier.offset(x = (-8).dp)
             ) {
-                IconButton(onClick = onBackClick) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
-                }
-                
-                // AI Avatar
+                Icon(
+                    imageVector = Icons.Default.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+            
+            // AI Avatar and Info
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
@@ -259,7 +270,8 @@ private fun ChatHeader(
                 Icon(
                     imageVector = Icons.Default.Delete,
                     contentDescription = "Clear Chat",
-                    tint = Error
+                    tint = Error,
+                    modifier = Modifier.size(22.dp)
                 )
             }
         }
@@ -486,11 +498,18 @@ private fun ChatBubble(
                         .padding(12.dp)
                 ) {
                     Column {
+                        // Format AI responses better
+                        val formattedContent = if (!isUser) {
+                            formatAIResponse(message.content)
+                        } else {
+                            message.content
+                        }
+                        
                         Text(
-                            text = message.content,
+                            text = formattedContent,
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (isUser) Color.White else MaterialTheme.colorScheme.onSurface,
-                            lineHeight = 20.sp
+                            lineHeight = 22.sp
                         )
                         
                         Spacer(modifier = Modifier.height(4.dp))
@@ -603,80 +622,202 @@ private fun ChatInputSection(
     onValueChange: (String) -> Unit,
     onSend: () -> Unit,
     isLoading: Boolean,
+    viewModel: AINutritionistViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    var isRecording by remember { mutableStateOf(false) }
+    var recordedText by remember { mutableStateOf("") }
+    val coroutineScope = rememberCoroutineScope()
+    
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            // Send image directly to AI for analysis
+            viewModel.sendMessageWithImage("Analyze this food image", uri)
+        }
+    }
+    
+    // Speech Recognizer
+    val speechIntent = remember {
+        android.content.Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE, java.util.Locale.getDefault())
+            putExtra(android.speech.RecognizerIntent.EXTRA_PROMPT, "Speak your question...")
+        }
+    }
+    
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == ComponentActivity.RESULT_OK) {
+            val results = result.data?.getStringArrayListExtra(android.speech.RecognizerIntent.EXTRA_RESULTS)
+            results?.firstOrNull()?.let { transcribedText ->
+                onValueChange(transcribedText)
+                recordedText = transcribedText
+            }
+        }
+        isRecording = false
+    }
+    
+    // Handle recording state changes
+    LaunchedEffect(isRecording) {
+        if (isRecording) {
+            try {
+                // Check if speech recognition is available
+                if (android.speech.SpeechRecognizer.isRecognitionAvailable(context)) {
+                    speechLauncher.launch(speechIntent)
+                } else {
+                    // Fallback: Show message that speech recognition is not available
+                    onValueChange("Speech recognition not available on this device")
+                    isRecording = false
+                }
+            } catch (e: Exception) {
+                // Fallback: Show error message
+                onValueChange("Error: ${e.message}")
+                isRecording = false
+            }
+        }
+    }
+    
     GlassmorphicCard(
         modifier = modifier,
         cornerRadius = 24.dp,
         borderWidth = 1.dp
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                modifier = Modifier.weight(1f),
-                placeholder = {
-                    Text(
-                        text = "Ask me anything about nutrition...",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    )
-                },
-                keyboardOptions = KeyboardOptions(
-                    imeAction = ImeAction.Send
-                ),
-                keyboardActions = KeyboardActions(
-                    onSend = { onSend() }
-                ),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.Transparent,
-                    unfocusedBorderColor = Color.Transparent
-                ),
-                maxLines = 4
-            )
-            
-            Spacer(modifier = Modifier.width(8.dp))
-            
-            // Send Button
-            var isPressed by remember { mutableStateOf(false) }
-            val scale by animateFloatAsState(
-                targetValue = if (isPressed) 0.85f else 1f,
-                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
-            )
-            
-            IconButton(
-                onClick = onSend,
-                enabled = value.isNotBlank() && !isLoading,
+        Column {
+            // Action buttons row
+            Row(
                 modifier = Modifier
-                    .size(48.dp)
-                    .scale(scale)
-                    .clip(CircleShape)
-                    .background(
-                        if (value.isNotBlank()) {
-                            Brush.linearGradient(
-                                colors = listOf(PrimaryIndigo, PrimaryPurple)
-                            )
-                        } else {
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    MaterialTheme.colorScheme.surfaceVariant
-                                )
-                            )
-                        }
-                    )
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = Icons.Default.Send,
-                    contentDescription = "Send",
-                    tint = if (value.isNotBlank()) Color.White 
-                           else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
+                // Image upload button
+                IconButton(
+                    onClick = { imagePickerLauncher.launch("image/*") },
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Image,
+                        contentDescription = "Upload Image",
+                        tint = PrimaryTeal,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                
+                // Microphone button
+                IconButton(
+                    onClick = { isRecording = !isRecording },
+                    modifier = Modifier
+                        .size(36.dp)
+                        .background(
+                            if (isRecording) Error.copy(alpha = 0.2f) else Color.Transparent,
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
+                        contentDescription = if (isRecording) "Stop Recording" else "Voice Input",
+                        tint = if (isRecording) Error else PrimaryIndigo,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                
+                if (isRecording) {
+                    Text(
+                        text = "🎤 Recording...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Error,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            // Input row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                OutlinedTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = {
+                        Text(
+                            text = "Ask me anything about nutrition...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Send
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onSend = { onSend() }
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color.Transparent,
+                        unfocusedBorderColor = Color.Transparent
+                    ),
+                    maxLines = 4
                 )
+                
+                Spacer(modifier = Modifier.width(8.dp))
+                
+                // Send Button
+                var isPressed by remember { mutableStateOf(false) }
+                val scale by animateFloatAsState(
+                    targetValue = if (isPressed) 0.85f else 1f,
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                )
+                
+                IconButton(
+                    onClick = onSend,
+                    enabled = value.isNotBlank() && !isLoading,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .scale(scale)
+                        .clip(CircleShape)
+                        .background(
+                            if (value.isNotBlank()) {
+                                Brush.linearGradient(
+                                    colors = listOf(PrimaryIndigo, PrimaryPurple)
+                                )
+                            } else {
+                                Brush.linearGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.surfaceVariant,
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    )
+                                )
+                            }
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Send,
+                        contentDescription = "Send",
+                        tint = if (value.isNotBlank()) Color.White 
+                               else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun formatAIResponse(text: String): String {
+    // Clean up and format AI responses
+    return text
+        .replace("\\n\\n+".toRegex(), "\n\n") // Remove excessive line breaks
+        .replace("\\*\\*([^*]+)\\*\\*".toRegex(), "$1") // Remove markdown bold
+        .replace("\\* ([^\n]+)".toRegex(), "• $1") // Convert * to bullet points
+        .replace("\\d+\\. ([^\n]+)".toRegex(), "$1") // Remove numbered lists format
+        .trim()
+        .takeIf { it.isNotEmpty() } ?: text
 }

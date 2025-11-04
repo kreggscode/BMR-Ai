@@ -121,7 +121,11 @@ fun BMRCalculatorScreen(
                         proteinGrams = uiState.proteinGrams,
                         carbsGrams = uiState.carbsGrams,
                         fatGrams = uiState.fatGrams,
-                        onSave = viewModel::saveBMRRecord,
+                        isLoadingAI = uiState.isLoadingAI,
+                        onSave = {
+                            viewModel.saveBMRRecord()
+                            navController.navigateUp() // Navigate back after saving
+                        },
                         onRecalculate = viewModel::resetCalculation,
                         onAIAnalysis = viewModel::requestAIAnalysis
                     )
@@ -129,7 +133,15 @@ fun BMRCalculatorScreen(
                     // AI Analysis
                     uiState.aiAnalysis?.let { analysis ->
                         Spacer(modifier = Modifier.height(20.dp))
-                        AIAnalysisCard(analysis = analysis)
+                        AIAnalysisCard(
+                            analysis = analysis,
+                            bmr = uiState.calculatedBMR,
+                            tdee = uiState.calculatedTDEE,
+                            targetCalories = uiState.targetCalories,
+                            proteinGrams = uiState.proteinGrams,
+                            carbsGrams = uiState.carbsGrams,
+                            fatGrams = uiState.fatGrams
+                        )
                     }
                 }
             }
@@ -679,6 +691,7 @@ private fun BMRResultsSection(
     proteinGrams: Double,
     carbsGrams: Double,
     fatGrams: Double,
+    isLoadingAI: Boolean,
     onSave: () -> Unit,
     onRecalculate: () -> Unit,
     onAIAnalysis: () -> Unit
@@ -741,18 +754,13 @@ private fun BMRResultsSection(
         }
         
         // AI Analysis Button
-        OutlinedButton(
+        AnimatedGradientButton(
+            text = "Get AI Analysis",
             onClick = onAIAnalysis,
             modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = PrimaryPurple
-            ),
-            border = BorderStroke(1.dp, PrimaryPurple)
-        ) {
-            Icon(Icons.Default.SmartToy, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Get AI Analysis")
-        }
+            icon = Icons.Default.SmartToy,
+            isLoading = isLoadingAI
+        )
     }
 }
 
@@ -927,40 +935,508 @@ private fun MacroItem(
 }
 
 @Composable
-private fun AIAnalysisCard(analysis: String) {
+private fun AIAnalysisCard(
+    analysis: String,
+    bmr: Double,
+    tdee: Double,
+    targetCalories: Double,
+    proteinGrams: Double,
+    carbsGrams: Double,
+    fatGrams: Double
+) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Header Card with Gradient
+        PremiumCard(
+            modifier = Modifier.fillMaxWidth(),
+            gradientColors = listOf(PrimaryPurple, PrimaryIndigo, PrimaryTeal)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(Color.White.copy(alpha = 0.2f), Color.White.copy(alpha = 0.1f))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SmartToy,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = "AI Metabolic Analysis",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Personalized Health Insights",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.9f)
+                    )
+                }
+            }
+        }
+        
+        // Progressive Circles Display
+        ProgressiveCirclesAnalysis(
+            bmr = bmr,
+            tdee = tdee,
+            targetCalories = targetCalories,
+            proteinGrams = proteinGrams,
+            carbsGrams = carbsGrams,
+            fatGrams = fatGrams
+        )
+        
+        // Formatted Text Summary
+        FormattedAnalysisSummary(analysis = analysis)
+    }
+}
+
+@Composable
+private fun ProgressiveCirclesAnalysis(
+    bmr: Double,
+    tdee: Double,
+    targetCalories: Double,
+    proteinGrams: Double,
+    carbsGrams: Double,
+    fatGrams: Double
+) {
+    // Calculate progress values (normalized to 0-1)
+    val bmrProgress = (bmr / 3000.0).coerceIn(0.0, 1.0)
+    val tdeeProgress = (tdee / 4000.0).coerceIn(0.0, 1.0)
+    val targetProgress = (targetCalories / 3500.0).coerceIn(0.0, 1.0)
+    
+    // Calculate macro percentages from grams
+    val totalCalories = targetCalories.coerceAtLeast(1.0)
+    val proteinCalories = proteinGrams * 4
+    val carbsCalories = carbsGrams * 4
+    val fatCalories = fatGrams * 9
+    
+    val proteinPercent = ((proteinCalories / totalCalories) * 100).toInt().coerceIn(0, 100)
+    val carbsPercent = ((carbsCalories / totalCalories) * 100).toInt().coerceIn(0, 100)
+    val fatPercent = ((fatCalories / totalCalories) * 100).toInt().coerceIn(0, 100)
+    
+    val proteinProgress = (proteinPercent / 100.0).coerceIn(0.0, 1.0)
+    val carbsProgress = (carbsPercent / 100.0).coerceIn(0.0, 1.0)
+    val fatProgress = (fatPercent / 100.0).coerceIn(0.0, 1.0)
+    
     GlassmorphicCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 20.dp
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.SmartToy,
-                        contentDescription = null,
-                        tint = PrimaryPurple,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "AI Analysis",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
+            Text(
+                text = "Metabolic Metrics",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            // BMR, TDEE, Target Circles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                if (bmr > 0) {
+                    ProgressCircle(
+                        label = "BMR",
+                        value = bmr.toInt(),
+                        unit = "kcal",
+                        progress = bmrProgress.toFloat(),
+                        color = PrimaryTeal,
+                        modifier = Modifier.weight(1f)
                     )
                 }
-                
-                Spacer(modifier = Modifier.height(12.dp))
-                
+                if (tdee > 0) {
+                    ProgressCircle(
+                        label = "TDEE",
+                        value = tdee.toInt(),
+                        unit = "kcal",
+                        progress = tdeeProgress.toFloat(),
+                        color = PrimaryIndigo,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                if (targetCalories > 0) {
+                    ProgressCircle(
+                        label = "Target",
+                        value = targetCalories.toInt(),
+                        unit = "kcal",
+                        progress = targetProgress.toFloat(),
+                        color = PrimaryPurple,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Text(
+                text = "Macronutrient Balance",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            // Macro Circles
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                ProgressCircle(
+                    label = "Protein",
+                    value = proteinPercent,
+                    unit = "%",
+                    progress = proteinProgress.toFloat(),
+                    color = AccentCoral,
+                    modifier = Modifier.weight(1f)
+                )
+                ProgressCircle(
+                    label = "Carbs",
+                    value = carbsPercent,
+                    unit = "%",
+                    progress = carbsProgress.toFloat(),
+                    color = PrimaryTeal,
+                    modifier = Modifier.weight(1f)
+                )
+                ProgressCircle(
+                    label = "Fat",
+                    value = fatPercent,
+                    unit = "%",
+                    progress = fatProgress.toFloat(),
+                    color = PrimaryPurple,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProgressCircle(
+    label: String,
+    value: Int,
+    unit: String,
+    progress: Float,
+    color: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier.size(100.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(
+                progress = progress,
+                modifier = Modifier.fillMaxSize(),
+                color = color,
+                strokeWidth = 8.dp,
+                trackColor = color.copy(alpha = 0.2f)
+            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
-                    text = analysis,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 22.sp
+                    text = "$value",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+                Text(
+                    text = unit,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun FormattedAnalysisSummary(analysis: String) {
+    // Clean and format the analysis text
+    val cleanedText = analysis
+        .replace(Regex("^[A-Z\\s]+:", RegexOption.MULTILINE), "") // Remove ALL CAPS headers
+        .replace(Regex("\\*\\*([^*]+)\\*\\*"), "$1") // Remove markdown bold
+        .replace(Regex("^\\s*\\*\\s+"), "• ") // Convert * to bullet points
+        .replace(Regex("^\\s*\\d+\\.\\s+"), "") // Remove numbered list prefixes
+        .replace(Regex("\\n{3,}"), "\n\n") // Remove excessive line breaks
+        .replace(Regex("COMPREHENSIVE METABOLIC ANALYSIS REPORT", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("PERSONAL METABOLIC PROFILE", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("ANALYSIS SECTIONS", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("FORMATTING REQUIREMENTS", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("MEDICAL DISCLAIMER", RegexOption.IGNORE_CASE), "")
+        .trim()
+    
+    // Split into paragraphs
+    val paragraphs = cleanedText.split("\n\n").filter { 
+        it.isNotBlank() && 
+        it.length > 20 && 
+        !it.contains("DISCLAIMER", ignoreCase = true) &&
+        !it.contains("MEDICAL", ignoreCase = true)
+    }
+    
+    if (paragraphs.isNotEmpty()) {
+        GlassmorphicCard(
+            modifier = Modifier.fillMaxWidth(),
+            cornerRadius = 20.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Key Insights",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                paragraphs.take(5).forEach { paragraph ->
+                    val trimmed = paragraph.trim()
+                    if (trimmed.isNotEmpty()) {
+                        Text(
+                            text = trimmed,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 24.sp,
+                            modifier = Modifier.padding(vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun parseAndDisplayAnalysis(analysis: String) {
+    // Split analysis into sections
+    val sections = analysis.split("\n\n").filter { it.isNotBlank() }
+    
+    sections.forEachIndexed { index, section ->
+        when {
+            section.contains("PERSONAL METABOLIC PROFILE", ignoreCase = true) ||
+            section.contains("UNDERSTANDING YOUR METABOLISM", ignoreCase = true) -> {
+                AnalysisSection(
+                    title = "Your Metabolic Profile",
+                    content = section,
+                    icon = Icons.Default.Person,
+                    gradientColors = listOf(PrimaryTeal, AccentMint)
+                )
+            }
+            section.contains("CALORIE MANAGEMENT", ignoreCase = true) -> {
+                AnalysisSection(
+                    title = "Calorie Strategy",
+                    content = section,
+                    icon = Icons.Default.LocalFireDepartment,
+                    gradientColors = listOf(AccentCoral, Warning)
+                )
+            }
+            section.contains("MACRONUTRIENT", ignoreCase = true) -> {
+                AnalysisSection(
+                    title = "Macronutrient Breakdown",
+                    content = section,
+                    icon = Icons.Default.Restaurant,
+                    gradientColors = listOf(PrimaryIndigo, PrimaryPurple)
+                )
+            }
+            section.contains("MEAL TIMING", ignoreCase = true) -> {
+                AnalysisSection(
+                    title = "Meal Timing Protocol",
+                    content = section,
+                    icon = Icons.Default.Schedule,
+                    gradientColors = listOf(PrimaryPurple, PrimaryPink)
+                )
+            }
+            section.contains("METABOLIC ENHANCEMENT", ignoreCase = true) -> {
+                AnalysisSection(
+                    title = "Optimization Strategies",
+                    content = section,
+                    icon = Icons.Default.TrendingUp,
+                    gradientColors = listOf(Success, PrimaryTeal)
+                )
+            }
+            section.contains("MISTAKES TO AVOID", ignoreCase = true) -> {
+                AnalysisSection(
+                    title = "Critical Mistakes to Avoid",
+                    content = section,
+                    icon = Icons.Default.Warning,
+                    gradientColors = listOf(Warning, AccentCoral)
+                )
+            }
+            section.contains("PROGRESS TIMELINE", ignoreCase = true) ||
+            section.contains("EXPECTATIONS", ignoreCase = true) -> {
+                AnalysisSection(
+                    title = "Progress Timeline",
+                    content = section,
+                    icon = Icons.Default.Timeline,
+                    gradientColors = listOf(PrimaryIndigo, PrimaryTeal)
+                )
+            }
+            section.contains("RECOVERY", ignoreCase = true) ||
+            section.contains("HYDRATION", ignoreCase = true) -> {
+                AnalysisSection(
+                    title = "Recovery & Hydration",
+                    content = section,
+                    icon = Icons.Default.WaterDrop,
+                    gradientColors = listOf(PrimaryTeal, AccentMint)
+                )
+            }
+            section.contains("DISCLAIMER", ignoreCase = true) -> {
+                DisclaimerSection(content = section)
+            }
+            section.length > 50 && !section.contains("COMPREHENSIVE", ignoreCase = true) -> {
+                // Generic section for any other content
+                AnalysisSection(
+                    title = "Additional Insights",
+                    content = section,
+                    icon = Icons.Default.Lightbulb,
+                    gradientColors = listOf(PrimaryPurple, PrimaryIndigo)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AnalysisSection(
+    title: String,
+    content: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    gradientColors: List<Color>
+) {
+    GlassmorphicCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 20.dp
+    ) {
+        Column {
+            // Section Header with Gradient
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .background(
+                        Brush.linearGradient(gradientColors)
+                    )
+                    .padding(16.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            // Content with properly formatted text
+            val formattedContent = content
+                .replace(Regex("^[A-Z\\s]+:", RegexOption.MULTILINE), "") // Remove ALL CAPS headers
+                .replace(Regex("\\*\\*([^*]+)\\*\\*"), "$1") // Remove markdown bold
+                .replace(Regex("^\\s*\\*\\s+"), "• ") // Convert * to bullet points
+                .replace(Regex("^\\s*\\d+\\.\\s+"), "") // Remove numbered list prefixes
+                .replace(Regex("\\n{3,}"), "\n\n") // Remove excessive line breaks
+                .trim()
+            
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                // Split by lines and format each paragraph
+                val paragraphs = formattedContent.split("\n\n").filter { it.isNotBlank() }
+                
+                paragraphs.forEach { paragraph ->
+                    val trimmedParagraph = paragraph.trim()
+                    if (trimmedParagraph.isNotEmpty()) {
+                        Text(
+                            text = trimmedParagraph,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 26.sp,
+                            modifier = Modifier.padding(vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DisclaimerSection(content: String) {
+    GlassmorphicCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp,
+        borderWidth = 1.dp
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = "Medical Disclaimer",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = content.replace("MEDICAL DISCLAIMER", "").trim(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 18.sp
                 )
             }
         }

@@ -51,8 +51,8 @@ fun GlassmorphicCard(
                 modifier = Modifier
                     .matchParentSize()
                     .background(
-                        if (isDarkTheme) colors.surface.copy(alpha = 0.35f)
-                        else colors.surface.copy(alpha = 0.85f)
+                        if (isDarkTheme) colors.surface.copy(alpha = 0.55f)
+                        else colors.surface.copy(alpha = 0.92f)
                     )
             )
         }
@@ -95,12 +95,34 @@ fun GlassmorphicCard(
 }
 
 @Composable
+fun PremiumCard(
+    modifier: Modifier = Modifier,
+    gradientColors: List<Color>,
+    cornerRadius: Dp = 20.dp,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(cornerRadius))
+            .background(
+                brush = Brush.linearGradient(
+                    colors = gradientColors
+                )
+            )
+            .padding(20.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
 fun AnimatedGradientButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    isLoading: Boolean = false
+    isLoading: Boolean = false,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -154,11 +176,25 @@ fun AnimatedGradientButton(
                 strokeWidth = 2.dp
             )
         } else {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White
-            )
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                icon?.let {
+                    Icon(
+                        imageVector = it,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White
+                )
+            }
         }
     }
 }
@@ -205,34 +241,26 @@ private fun FloatingNavBarItem(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.1f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy
-        )
-    )
-    
     val iconColor by animateColorAsState(
         targetValue = if (isSelected) Color(0xFF14B8A6)
                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-        animationSpec = tween(300)
+        animationSpec = tween(200)
     )
     
     val textColor by animateColorAsState(
         targetValue = if (isSelected) Color(0xFF14B8A6)
                       else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-        animationSpec = tween(300)
+        animationSpec = tween(200)
     )
     
     Column(
         modifier = Modifier
-            .scale(scale)
             .clickable(
-                indication = rememberRipple(bounded = true, radius = 32.dp),
+                indication = null,
                 interactionSource = remember { MutableInteractionSource() },
                 onClick = onClick
             )
-            .padding(horizontal = 6.dp, vertical = 10.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -240,9 +268,9 @@ private fun FloatingNavBarItem(
             imageVector = item.icon,
             contentDescription = item.label,
             tint = iconColor,
-            modifier = Modifier.size(26.dp)
+            modifier = Modifier.size(20.dp)
         )
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = item.label,
             style = MaterialTheme.typography.labelSmall,

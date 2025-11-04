@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.kreggscode.bmr.data.local.dao.BMRDao
 import com.kreggscode.bmr.data.local.dao.FoodDao
 import com.kreggscode.bmr.data.local.dao.UserDao
+import com.kreggscode.bmr.data.local.dao.WaterDao
+import com.kreggscode.bmr.data.local.entities.WaterIntake
 import com.kreggscode.bmr.presentation.screens.RecentMeal
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -16,7 +18,8 @@ import javax.inject.Inject
 class HomeViewModel @Inject constructor(
     private val userDao: UserDao,
     private val bmrDao: BMRDao,
-    private val foodDao: FoodDao
+    private val foodDao: FoodDao,
+    private val waterDao: WaterDao
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -26,7 +29,33 @@ class HomeViewModel @Inject constructor(
         loadUserData()
         loadTodayStats()
         loadRecentMeals()
+        loadTodayWater()
         refreshMotivation()
+    }
+    
+    private fun loadTodayWater() {
+        viewModelScope.launch {
+            userDao.getCurrentUser().collect { user ->
+                user?.let { profile ->
+                    val today = Calendar.getInstance().apply {
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                    
+                    // Use Flow to auto-update when water changes
+                    waterDao.getWaterIntakeByDateFlow(profile.id, today).collect { todayRecord ->
+                        _uiState.update { state ->
+                            state.copy(
+                                waterIntake = todayRecord?.glasses ?: 0,
+                                totalWaterMl = todayRecord?.totalMl ?: 0
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
     
     private fun loadUserData() {
@@ -132,22 +161,92 @@ class HomeViewModel @Inject constructor(
     }
     
     fun addWater(glassSize: Int) {
-        _uiState.update { state ->
-            state.copy(
-                waterIntake = state.waterIntake + 1,
-                totalWaterMl = state.totalWaterMl + glassSize,
-                showWaterDialog = false
-            )
+        viewModelScope.launch {
+            val user = userDao.getCurrentUser().firstOrNull() ?: return@launch
+            val today = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            
+            val existing = waterDao.getWaterIntakeByDate(user.id, today)
+            
+            if (existing != null) {
+                val updated = existing.copy(
+                    totalMl = existing.totalMl + glassSize,
+                    glasses = existing.glasses + 1,
+                    lastUpdated = System.currentTimeMillis()
+                )
+                waterDao.updateWaterIntake(updated)
+            } else {
+                val newRecord = WaterIntake(
+                    userId = user.id,
+                    date = today,
+                    totalMl = glassSize,
+                    glasses = 1,
+                    lastUpdated = System.currentTimeMillis()
+                )
+                waterDao.insertWaterIntake(newRecord)
+            }
+            
+            // Reload water data
+            loadTodayWater()
+            
+            _uiState.update { it.copy(showWaterDialog = false) }
         }
     }
     
     fun resetWater() {
-        _uiState.update { state ->
-            state.copy(
-                waterIntake = 0,
-                totalWaterMl = 0
-            )
+        viewModelScope.launch {
+            val user = userDao.getCurrentUser().firstOrNull() ?: return@launch
+            val today = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            
+            waterDao.deleteWaterIntakeByDate(user.id, today)
+            loadTodayWater()
         }
+    }
+    
+    fun removeWater(glassSize: Int) {
+        viewModelScope.launch {
+            val user = userDao.getCurrentUser().firstOrNull() ?: return@launch
+            val today = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            
+            val existing = waterDao.getWaterIntakeByDate(user.id, today)
+            existing?.let { record ->
+                val newMl = (record.totalMl - glassSize).coerceAtLeast(0)
+                val newGlasses = (record.glasses - 1).coerceAtLeast(0)
+                
+                if (newMl == 0 && newGlasses == 0) {
+                    waterDao.deleteWaterIntakeByDate(user.id, today)
+                } else {
+                    val updated = record.copy(
+                        totalMl = newMl,
+                        glasses = newGlasses,
+                        lastUpdated = System.currentTimeMillis()
+                    )
+                    waterDao.updateWaterIntake(updated)
+                }
+            }
+            
+            loadTodayWater()
+        }
+    }
+    
+    fun saveWaterIntake() {
+        // Save current water intake when navigating away
+        // This ensures water is saved when user presses back
+        // TODO: Implement water persistence
     }
     
     private fun formatTime(timestamp: Long): String {

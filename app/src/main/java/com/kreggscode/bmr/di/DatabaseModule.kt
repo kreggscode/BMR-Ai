@@ -40,4 +40,16 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideFoodDao(database: BMRDatabase): FoodDao = database.foodDao()
+    
+    @Provides
+    @Singleton
+    fun provideDietPlanDao(database: BMRDatabase): DietPlanDao = database.dietPlanDao()
+    
+    @Provides
+    @Singleton
+    fun provideSleepDao(database: BMRDatabase): SleepDao = database.sleepDao()
+    
+    @Provides
+    @Singleton
+    fun provideWaterDao(database: BMRDatabase): WaterDao = database.waterDao()
 }

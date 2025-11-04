@@ -4,28 +4,86 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    
+    <!-- Background Circle with Gradient Effect -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54m-48,0a48,48 0,1 1,96 0a48,48 0,1 1,-96 0"
+        android:fillAlpha="0.15"/>
+    
+    <!-- B Letter - Bold and Modern -->
     <group
-        android:scaleX="0.5"
-        android:scaleY="0.5"
-        android:translateX="27"
-        android:translateY="27">
-        <!-- Heart rate / health icon -->
+        android:translateX="20"
+        android:translateY="30">
+        <!-- B - Left vertical line -->
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M54,20C48.48,20 44,24.48 44,30c0,8.28 10,18 10,18s10,-9.72 10,-18C64,24.48 59.52,20 54,20zM54,34c-2.21,0 -4,-1.79 -4,-4s1.79,-4 4,-4 4,1.79 4,4 -1.79,4 -4,4z"/>
-        <!-- Fitness/activity ring -->
-        <path
-            android:fillColor="#14B8A6"
-            android:pathData="M54,54m-20,0a20,20 0,1 1,40 0a20,20 0,1 1,-40 0"
-            android:strokeWidth="4"
-            android:strokeColor="#FFFFFF"
-            android:fillAlpha="0"/>
-        <!-- BMR text stylized as icon -->
+            android:pathData="M8,8h6v48h-6z"/>
+        <!-- B - Top curve -->
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M42,60h4v12h-4z"/>
+            android:pathData="M8,8h16c8,0 14,6 14,14s-6,14 -14,14h-8v-4h8c5,0 9,-4 9,-9s-4,-9 -9,-9h-8z"/>
+        <!-- B - Bottom curve -->
         <path
             android:fillColor="#FFFFFF"
-            android:pathData="M50,60h4l4,8l4,-8h4v12h-4v-6l-4,6l-4,-6v6h-4z"/>
+            android:pathData="M8,32h16c8,0 14,6 14,14s-6,14 -14,14h-8v-4h8c5,0 9,-4 9,-9s-4,-9 -9,-9h-8z"/>
     </group>
+    
+    <!-- M Letter - Bold and Modern -->
+    <group
+        android:translateX="42"
+        android:translateY="30">
+        <!-- M - Left vertical -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M8,8h6v48h-6z"/>
+        <!-- M - Right vertical -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M38,8h6v48h-6z"/>
+        <!-- M - Left peak -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M8,8l12,24l12,-24v24h-6v-14l-8,14h-4l-8,-14v14h-6z"/>
+    </group>
+    
+    <!-- R Letter - Bold and Modern -->
+    <group
+        android:translateX="64"
+        android:translateY="30">
+        <!-- R - Left vertical -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M8,8h6v48h-6z"/>
+        <!-- R - Top horizontal and curve -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M8,8h16c8,0 14,6 14,14s-6,14 -14,14h-8v-4h8c5,0 9,-4 9,-9s-4,-9 -9,-9h-8z"/>
+        <!-- R - Diagonal -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M24,32l14,24h-6l-8,-14v14h-6v-24h6z"/>
+    </group>
+    
+    <!-- Decorative Elements - Activity Rings -->
+    <path
+        android:fillColor="#14B8A6"
+        android:pathData="M54,54m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0"
+        android:strokeWidth="3"
+        android:strokeColor="#14B8A6"
+        android:fillAlpha="0"/>
+    <path
+        android:fillColor="#6366F1"
+        android:pathData="M54,54m-32,0a32,32 0,1 1,64 0a32,32 0,1 1,-64 0"
+        android:strokeWidth="2"
+        android:strokeColor="#6366F1"
+        android:fillAlpha="0"/>
+    
+    <!-- Small accent dots (using paths instead of circles) -->
+    <path
+        android:fillColor="#EC4899"
+        android:pathData="M30,20m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"/>
+    <path
+        android:fillColor="#EC4899"
+        android:pathData="M78,88m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0"/>
 </vector>

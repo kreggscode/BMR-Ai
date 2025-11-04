@@ -26,4 +26,7 @@ interface BMRDao {
     
     @Query("DELETE FROM bmr_records WHERE userId = :userId")
     suspend fun deleteAllUserBMRRecords(userId: Long)
+    
+    @Query("DELETE FROM bmr_records WHERE userId = :userId")
+    suspend fun deleteBMRRecordsForUser(userId: Long)
 }

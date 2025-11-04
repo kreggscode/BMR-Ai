@@ -22,6 +22,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.kreggscode.bmr.Screen
 import com.kreggscode.bmr.presentation.viewmodels.TimePeriod
 import com.kreggscode.bmr.ui.components.*
 import com.kreggscode.bmr.ui.theme.*
@@ -59,16 +60,20 @@ fun ProgressScreen(
                 onPeriodSelect = viewModel::selectPeriod
             )
             
+            // Period Explanation
+            PeriodExplanation(selectedPeriod = uiState.selectedPeriod)
+            
             Spacer(modifier = Modifier.height(24.dp))
             
             // Calorie Progress Circle
             CalorieProgressCircle(
                 progress = uiState.progress,
-                caloriesConsumed = uiState.avgCalories,
+                caloriesConsumed = if (uiState.selectedPeriod == TimePeriod.WEEK) uiState.todayCalories else uiState.avgCalories,
                 caloriesGoal = uiState.targetCalories,
                 deficit = uiState.deficit,
                 burned = uiState.burned,
-                active = uiState.active
+                active = uiState.active,
+                period = uiState.selectedPeriod
             )
             
             Spacer(modifier = Modifier.height(24.dp))
@@ -77,13 +82,15 @@ fun ProgressScreen(
             ProgressStatsGrid(
                 weightLost = uiState.weightLost,
                 streak = uiState.streak,
-                waterAvg = uiState.waterAvg
+                waterAvg = uiState.waterAvg,
+                sleepAvg = uiState.sleepAvg,
+                onSleepClick = { navController.navigate(Screen.SleepTracking.route) }
             )
             
             Spacer(modifier = Modifier.height(24.dp))
             
             // Weight Progress Chart
-            WeightProgressChart()
+            WeightProgressChart(viewModel = viewModel)
             
             Spacer(modifier = Modifier.height(24.dp))
             
@@ -202,13 +209,46 @@ private fun PeriodChip(
 }
 
 @Composable
+private fun PeriodExplanation(selectedPeriod: TimePeriod) {
+    val explanation = when (selectedPeriod) {
+        TimePeriod.WEEK -> "📊 Showing today's calories consumed vs. your daily target"
+        TimePeriod.MONTH -> "📊 Showing average daily calories over the last 30 days"
+        TimePeriod.YEAR -> "📊 Showing average daily calories over the last 365 days"
+    }
+    
+    GlassmorphicCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 12.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = PrimaryIndigo,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = explanation,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun CalorieProgressCircle(
     progress: Float,
     caloriesConsumed: Int,
     caloriesGoal: Int,
     deficit: Int,
     burned: Int,
-    active: Int
+    active: Int,
+    period: TimePeriod
 ) {
     
     GlassmorphicCard(
@@ -226,13 +266,13 @@ private fun CalorieProgressCircle(
             ) {
                 Column {
                     Text(
-                        text = "Daily Calorie Intake",
+                        text = "Today's Calorie Intake",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Average for selected period",
+                        text = "Your consumption today",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -354,13 +394,15 @@ private fun CalorieStat(
 private fun ProgressStatsGrid(
     weightLost: Double,
     streak: Int,
-    waterAvg: Int
+    waterAvg: Int,
+    sleepAvg: Int,
+    onSleepClick: () -> Unit = {}
 ) {
     val stats = listOf(
-        ProgressStat("Weight Change", if (weightLost > 0) "-${String.format("%.1f", weightLost)}" else "0.0", "kg", Icons.Default.TrendingDown, if (weightLost > 0) Success else MaterialTheme.colorScheme.onSurfaceVariant),
-        ProgressStat("Logging Streak", if (streak > 0) streak.toString() else "0", "days", Icons.Default.LocalFireDepartment, if (streak > 0) AccentCoral else MaterialTheme.colorScheme.onSurfaceVariant),
-        ProgressStat("Sleep Goal", "8", "hours", Icons.Default.Bedtime, PrimaryIndigo),
-        ProgressStat("Water Goal", "8", "glasses", Icons.Default.WaterDrop, AccentSky)
+        ProgressStat("Weight Change", if (weightLost > 0) "-${String.format("%.1f", weightLost)}" else "--", "kg", Icons.Default.TrendingDown, if (weightLost > 0) Success else MaterialTheme.colorScheme.onSurfaceVariant, onClick = null),
+        ProgressStat("Logging Streak", if (streak > 0) streak.toString() else "--", "days", Icons.Default.LocalFireDepartment, if (streak > 0) AccentCoral else MaterialTheme.colorScheme.onSurfaceVariant, onClick = null),
+        ProgressStat("Sleep Avg", if (sleepAvg > 0) "$sleepAvg" else "--", "hrs", Icons.Default.Bedtime, PrimaryIndigo, onClick = onSleepClick),
+        ProgressStat("Water Intake", if (waterAvg > 0) waterAvg.toString() else "--", "glasses", Icons.Default.WaterDrop, AccentSky, onClick = null)
     )
     
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -386,11 +428,13 @@ private fun ProgressStatCard(
     modifier: Modifier = Modifier
 ) {
     GlassmorphicCard(
-        modifier = modifier,
+        modifier = modifier
+            .then(if (stat.onClick != null) Modifier.clickable { stat.onClick?.invoke() } else Modifier),
         cornerRadius = 16.dp
     ) {
         Row(
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(12.dp)
         ) {
             Box(
                 modifier = Modifier
@@ -437,101 +481,116 @@ private fun ProgressStatCard(
 }
 
 @Composable
-private fun WeightProgressChart() {
+private fun WeightProgressChart(
+    viewModel: com.kreggscode.bmr.presentation.viewmodels.ProgressViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    val currentWeight = remember { androidx.compose.runtime.mutableStateOf(0.0) }
+    val startWeight = remember { androidx.compose.runtime.mutableStateOf(0.0) }
+    
+    LaunchedEffect(Unit) {
+        // Load current weight from user profile
+        viewModel.loadUserWeight()
+    }
+    
+    LaunchedEffect(uiState.currentWeight) {
+        if (uiState.currentWeight > 0) {
+            currentWeight.value = uiState.currentWeight
+            if (startWeight.value == 0.0) {
+                startWeight.value = uiState.currentWeight // Use first weight as start
+            }
+        }
+    }
+    
     GlassmorphicCard(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 20.dp
     ) {
-        Column {
-            Text(
-                text = "Weight Trend",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            
-            Spacer(modifier = Modifier.height(20.dp))
-            
-            // Simplified chart visualization
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(200.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                PrimaryIndigo.copy(alpha = 0.1f),
-                                Color.Transparent
-                            )
-                        )
-                    )
+        Column(
+            modifier = Modifier.padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val width = size.width
-                    val height = size.height
-                    
-                    // Draw trend line
-                    val points = listOf(
-                        Offset(0f, height * 0.2f),
-                        Offset(width * 0.2f, height * 0.3f),
-                        Offset(width * 0.4f, height * 0.25f),
-                        Offset(width * 0.6f, height * 0.4f),
-                        Offset(width * 0.8f, height * 0.5f),
-                        Offset(width, height * 0.6f)
+                Text(
+                    text = "Weight Progress",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                IconButton(onClick = { /* TODO: Navigate to weight entry */ }) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Add Weight",
+                        tint = PrimaryTeal
                     )
-                    
-                    val path = Path().apply {
-                        moveTo(points.first().x, points.first().y)
-                        points.forEach { point ->
-                            lineTo(point.x, point.y)
-                        }
-                    }
-                    
-                    drawPath(
-                        path = path,
-                        brush = Brush.linearGradient(
-                            colors = listOf(PrimaryTeal, PrimaryIndigo, PrimaryPurple)
-                        ),
-                        style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
-                    )
-                    
-                    // Draw points
-                    points.forEach { point ->
-                        drawCircle(
-                            color = PrimaryIndigo,
-                            radius = 6.dp.toPx(),
-                            center = point
-                        )
-                        drawCircle(
-                            color = Color.White,
-                            radius = 3.dp.toPx(),
-                            center = point
-                        )
-                    }
                 }
             }
             
             Spacer(modifier = Modifier.height(12.dp))
             
+            // Show weight data from ViewModel state
+            val startWeightValue = if (uiState.startWeight > 0) uiState.startWeight else uiState.currentWeight
+            val currentWeightValue = uiState.currentWeight
+            val weightChange = if (uiState.startWeight > 0 && uiState.currentWeight > 0) {
+                uiState.currentWeight - uiState.startWeight
+            } else {
+                0.0
+            }
+            
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                WeightStat(label = "Start", value = "--")
-                WeightStat(label = "Current", value = "--")
-                WeightStat(label = "Goal", value = "--")
+                WeightStat(
+                    label = "Start", 
+                    value = if (startWeightValue > 0) "${String.format("%.1f", startWeightValue)} kg" else "--"
+                )
+                WeightStat(
+                    label = "Current", 
+                    value = if (currentWeightValue > 0) "${String.format("%.1f", currentWeightValue)} kg" else "--"
+                )
+                WeightStat(
+                    label = "Change", 
+                    value = if (weightChange != 0.0) {
+                        val sign = if (weightChange > 0) "+" else ""
+                        "$sign${String.format("%.1f", weightChange)} kg"
+                    } else "--"
+                )
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Text(
-                text = "💡 Track your weight in Settings to see progress",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (currentWeightValue <= 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "💡 Set your weight in BMR Calculator to track progress",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else if (weightChange < 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "🎉 Lost ${String.format("%.1f", kotlin.math.abs(weightChange))} kg",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Success,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            } else if (weightChange > 0) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "📈 Gained ${String.format("%.1f", weightChange)} kg",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Warning,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -710,7 +769,8 @@ data class ProgressStat(
     val value: String,
     val unit: String,
     val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val color: Color
+    val color: Color,
+    val onClick: (() -> Unit)? = null
 )
 
 data class Achievement(

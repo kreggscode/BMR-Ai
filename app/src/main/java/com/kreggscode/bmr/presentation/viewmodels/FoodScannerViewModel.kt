@@ -64,51 +64,167 @@ class FoodScannerViewModel @Inject constructor(
         
         viewModelScope.launch {
             try {
-                // Process image with Pollinations AI
-                val recognizedFoods = analyzeImageWithAI(imageUri)
+                // Analyze image with vision AI - provide detailed prompt
+                val prompt = """Analyze this food image and identify ALL visible food items with high precision.
+
+                REQUIREMENTS:
+                - Identify every single food item you can see in the image
+                - Be extremely specific about food names (e.g., "Grilled Chicken Breast" not just "Chicken")
+                - Provide accurate nutritional estimates per 100g serving
+                - If no food is visible, clearly state "No food items detected"
+
+                OUTPUT FORMAT - Use this EXACT format for each food item:
+                FOOD_ITEM: [Specific Food Name]
+                CALORIES: [number] kcal per 100g
+                PROTEIN: [number]g per 100g
+                CARBS: [number]g per 100g
+                FAT: [number]g per 100g
+                PORTION: [estimated portion size, e.g., 200g, 1 cup, 1 slice]
+                ---
+
+                List ALL food items separately. Do not combine items. Be thorough and accurate.""".trimIndent()
                 
-                _uiState.update { 
-                    it.copy(
-                        recognizedFoods = recognizedFoods,
-                        scanMode = ScanMode.RESULTS,
-                        isProcessing = false
-                    )
+                val result = aiService.analyzeFoodImage(prompt, imageUri, context)
+                
+                result.onSuccess { response ->
+                    val recognizedFoods = parseAIResponse(response)
+                    
+                    if (recognizedFoods.isNotEmpty()) {
+                        _uiState.update { 
+                            it.copy(
+                                recognizedFoods = recognizedFoods,
+                                scanMode = ScanMode.RESULTS,
+                                isProcessing = false
+                            )
+                        }
+                    } else {
+                        // No foods recognized
+                        _uiState.update { 
+                            it.copy(
+                                recognizedFoods = listOf(
+                                    RecognizedFoodItem(
+                                        name = "No food detected - Try again with better lighting",
+                                        confidence = 0.0f,
+                                        calories = 0.0,
+                                        portion = "N/A",
+                                        protein = 0.0,
+                                        carbs = 0.0,
+                                        fat = 0.0
+                                    )
+                                ),
+                                scanMode = ScanMode.RESULTS,
+                                isProcessing = false,
+                                error = "Could not identify any food items"
+                            )
+                        }
+                    }
+                }.onFailure { e ->
+                    _uiState.update { 
+                        it.copy(
+                            recognizedFoods = listOf(
+                                RecognizedFoodItem(
+                                    name = "Analysis failed - ${e.message}",
+                                    confidence = 0.0f,
+                                    calories = 0.0,
+                                    portion = "N/A",
+                                    protein = 0.0,
+                                    carbs = 0.0,
+                                    fat = 0.0
+                                )
+                            ),
+                            scanMode = ScanMode.RESULTS,
+                            isProcessing = false,
+                            error = e.message
+                        )
+                    }
                 }
             } catch (e: Exception) {
-                // Fallback to mock data for demo
-                val mockFoods = listOf(
-                    RecognizedFoodItem(
-                        name = "Grilled Chicken Breast",
-                        confidence = 0.92f,
-                        calories = 165.0,
-                        portion = "100g",
-                        protein = 31.0,
-                        carbs = 0.0,
-                        fat = 3.6
-                    ),
-                    RecognizedFoodItem(
-                        name = "Steamed Broccoli",
-                        confidence = 0.88f,
-                        calories = 35.0,
-                        portion = "100g",
-                        protein = 2.8,
-                        carbs = 7.0,
-                        fat = 0.4
-                    ),
-                    RecognizedFoodItem(
-                        name = "Brown Rice",
-                        confidence = 0.85f,
-                        calories = 112.0,
-                        portion = "100g",
-                        protein = 2.6,
-                        carbs = 23.5,
-                        fat = 0.9
-                    )
-                )
-                
                 _uiState.update { 
                     it.copy(
-                        recognizedFoods = mockFoods,
+                        recognizedFoods = listOf(
+                            RecognizedFoodItem(
+                                name = "Error: ${e.message ?: "Unknown error"}",
+                                confidence = 0.0f,
+                                calories = 0.0,
+                                portion = "N/A",
+                                protein = 0.0,
+                                carbs = 0.0,
+                                fat = 0.0
+                            )
+                        ),
+                        scanMode = ScanMode.RESULTS,
+                        isProcessing = false,
+                        error = e.message
+                    )
+                }
+            }
+        }
+    }
+    
+    fun processBarcode(imageUri: Uri) {
+        _uiState.update { 
+            it.copy(
+                isProcessing = true,
+                scannedImageUri = imageUri
+            )
+        }
+        
+        viewModelScope.launch {
+            try {
+                // Use AI to extract barcode information
+                val prompt = """Analyze this barcode image and provide the product information.
+                    If you can identify the product, provide:
+                    - Product name
+                    - Nutritional information per serving (calories, protein, carbs, fat)
+                    - Serving size
+                    
+                    Format the response clearly.""".trimIndent()
+                
+                val result = aiService.analyzeFoodDescription(prompt)
+                
+                result.getOrNull()?.let { response ->
+                    val foods = parseAIResponse(response)
+                    _uiState.update { 
+                        it.copy(
+                            recognizedFoods = foods,
+                            scanMode = ScanMode.RESULTS,
+                            isProcessing = false
+                        )
+                    }
+                } ?: run {
+                    // Fallback
+                    _uiState.update { 
+                        it.copy(
+                            recognizedFoods = listOf(
+                                RecognizedFoodItem(
+                                    name = "Product (Scan Again)",
+                                    confidence = 0.5f,
+                                    calories = 0.0,
+                                    portion = "1 serving",
+                                    protein = 0.0,
+                                    carbs = 0.0,
+                                    fat = 0.0
+                                )
+                            ),
+                            scanMode = ScanMode.RESULTS,
+                            isProcessing = false
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { 
+                    it.copy(
+                        recognizedFoods = listOf(
+                            RecognizedFoodItem(
+                                name = "Barcode scan failed - Try manual entry",
+                                confidence = 0.0f,
+                                calories = 0.0,
+                                portion = "1 serving",
+                                protein = 0.0,
+                                carbs = 0.0,
+                                fat = 0.0
+                            )
+                        ),
                         scanMode = ScanMode.RESULTS,
                         isProcessing = false
                     )
@@ -117,26 +233,7 @@ class FoodScannerViewModel @Inject constructor(
         }
     }
     
-    private suspend fun analyzeImageWithAI(imageUri: Uri): List<RecognizedFoodItem> {
-        return try {
-            // Use AI to analyze food description from image
-            val prompt = """Analyze this food and identify all items visible. For each item provide:
-                - Name of the food
-                - Estimated calories per 100g
-                - Protein, carbs, and fat content
-                - Suggested portion size
-                
-                Format as a list with each item on a new line.""".trimIndent()
-            
-            val result = aiService.analyzeFoodDescription(prompt)
-            
-            result.getOrNull()?.let { response ->
-                parseAIResponse(response)
-            } ?: emptyList()
-        } catch (e: Exception) {
-            emptyList()
-        }
-    }
+    // Removed - no longer needed, logic moved to processImage()
     
     private fun prepareImageFile(imageUri: Uri): File {
         val inputStream = context.contentResolver.openInputStream(imageUri)
@@ -166,45 +263,134 @@ class FoodScannerViewModel @Inject constructor(
     }
     
     private fun parseAIResponse(response: String): List<RecognizedFoodItem> {
-        // Parse AI text response and extract food items
         val foods = mutableListOf<RecognizedFoodItem>()
         
         try {
-            // Simple parsing - look for food names and nutritional info
-            val lines = response.lines().filter { it.isNotBlank() }
+            // Split by the separator "---" to get individual food items
+            val foodBlocks = response.split("---").filter { it.trim().isNotEmpty() }
             
-            lines.forEach { line ->
-                // Extract food name (usually first part before numbers)
-                val name = line.substringBefore(":").substringBefore("-").trim()
-                
-                // Extract calories (look for numbers followed by "cal" or "kcal")
-                val caloriesMatch = Regex("(\\d+)\\s*(cal|kcal)").find(line)
-                val calories = caloriesMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 150.0
-                
-                // Extract protein
-                val proteinMatch = Regex("(\\d+)g?\\s*protein", RegexOption.IGNORE_CASE).find(line)
-                val protein = proteinMatch?.groupValues?.get(1)?.toDoubleOrNull()
-                
-                // Extract carbs
-                val carbsMatch = Regex("(\\d+)g?\\s*carb", RegexOption.IGNORE_CASE).find(line)
-                val carbs = carbsMatch?.groupValues?.get(1)?.toDoubleOrNull()
-                
-                // Extract fat
-                val fatMatch = Regex("(\\d+)g?\\s*fat", RegexOption.IGNORE_CASE).find(line)
-                val fat = fatMatch?.groupValues?.get(1)?.toDoubleOrNull()
-                
-                if (name.isNotEmpty() && name.length > 2) {
-                    foods.add(
-                        RecognizedFoodItem(
-                            name = name.take(50),
-                            confidence = 0.85f,
-                            calories = calories,
-                            portion = "100g",
-                            protein = protein,
-                            carbs = carbs,
-                            fat = fat
+            foodBlocks.forEach { block ->
+                try {
+                    // Extract food name
+                    val foodItemMatch = Regex("FOOD_ITEM:\\s*(.+)", RegexOption.IGNORE_CASE).find(block)
+                    val name = foodItemMatch?.groupValues?.get(1)?.trim() ?: ""
+                    
+                    // Extract calories
+                    val caloriesMatch = Regex("CALORIES:\\s*(\\d+\\.?\\d*)", RegexOption.IGNORE_CASE).find(block)
+                    val calories = caloriesMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                    
+                    // Extract protein
+                    val proteinMatch = Regex("PROTEIN:\\s*(\\d+\\.?\\d*)", RegexOption.IGNORE_CASE).find(block)
+                    val protein = proteinMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                    
+                    // Extract carbs
+                    val carbsMatch = Regex("CARBS:\\s*(\\d+\\.?\\d*)", RegexOption.IGNORE_CASE).find(block)
+                    val carbs = carbsMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                    
+                    // Extract fat
+                    val fatMatch = Regex("FAT:\\s*(\\d+\\.?\\d*)", RegexOption.IGNORE_CASE).find(block)
+                    val fat = fatMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                    
+                    // Extract portion
+                    val portionMatch = Regex("PORTION:\\s*(.+)", RegexOption.IGNORE_CASE).find(block)
+                    val portion = portionMatch?.groupValues?.get(1)?.trim() ?: "100g"
+                    
+                    if (name.isNotEmpty() && name.length > 2 && calories > 0 && !name.contains("No food", ignoreCase = true)) {
+                        foods.add(
+                            RecognizedFoodItem(
+                                name = name.take(50),
+                                confidence = 0.90f,
+                                calories = calories,
+                                portion = portion,
+                                protein = protein,
+                                carbs = carbs,
+                                fat = fat
+                            )
                         )
-                    )
+                    }
+                } catch (e: Exception) {
+                    // Skip malformed blocks
+                }
+            }
+            
+            // Fallback: If no structured data found, try the old parsing format
+            if (foods.isEmpty()) {
+                val lines = response.lines().filter { it.contains("Food:") || it.contains("FOOD_ITEM:") || it.contains("|") }
+                
+                lines.forEach { line ->
+                    try {
+                        // Try new format first
+                        var name = ""
+                        var calories = 0.0
+                        var protein = 0.0
+                        var carbs = 0.0
+                        var fat = 0.0
+                        var portion = "100g"
+                        
+                        if (line.contains("FOOD_ITEM:")) {
+                            val foodItemMatch = Regex("FOOD_ITEM:\\s*(.+)", RegexOption.IGNORE_CASE).find(line)
+                            name = foodItemMatch?.groupValues?.get(1)?.trim() ?: ""
+                        } else if (line.contains("Food:")) {
+                            val nameMatch = Regex("Food:\\s*([^|]+)").find(line)
+                            name = nameMatch?.groupValues?.get(1)?.trim() ?: ""
+                        }
+                        
+                        // Extract numbers from the line
+                        val caloriesMatch = Regex("Calories:\\s*(\\d+\\.?\\d*)", RegexOption.IGNORE_CASE).find(line)
+                        calories = caloriesMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                        
+                        val proteinMatch = Regex("Protein:\\s*(\\d+\\.?\\d*)", RegexOption.IGNORE_CASE).find(line)
+                        protein = proteinMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                        
+                        val carbsMatch = Regex("(?:Carbs|Carbohydrate):\\s*(\\d+\\.?\\d*)", RegexOption.IGNORE_CASE).find(line)
+                        carbs = carbsMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                        
+                        val fatMatch = Regex("Fat:\\s*(\\d+\\.?\\d*)", RegexOption.IGNORE_CASE).find(line)
+                        fat = fatMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+                        
+                        val portionMatch = Regex("Portion:\\s*([^|]+)", RegexOption.IGNORE_CASE).find(line)
+                        portion = portionMatch?.groupValues?.get(1)?.trim() ?: "100g"
+                        
+                        if (name.isNotEmpty() && name.length > 3 && calories > 0) {
+                            foods.add(
+                                RecognizedFoodItem(
+                                    name = name.take(50),
+                                    confidence = 0.80f,
+                                    calories = calories,
+                                    portion = portion,
+                                    protein = protein,
+                                    carbs = carbs,
+                                    fat = fat
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        // Skip malformed lines
+                    }
+                }
+            }
+            
+            // Final fallback: Simple parsing if all else fails
+            if (foods.isEmpty()) {
+                val simpleLines = response.lines().filter { it.isNotBlank() && it.length > 10 && !it.contains("No food", ignoreCase = true) }
+                simpleLines.take(3).forEach { line ->
+                    val name = line.substringBefore(":").substringBefore("-").substringBefore("(").trim()
+                    val caloriesMatch = Regex("(\\d+)\\s*(cal|kcal)", RegexOption.IGNORE_CASE).find(line)
+                    val calories = caloriesMatch?.groupValues?.get(1)?.toDoubleOrNull() ?: 150.0
+                    
+                    if (name.length > 3) {
+                        foods.add(
+                            RecognizedFoodItem(
+                                name = name.take(50),
+                                confidence = 0.70f,
+                                calories = calories,
+                                portion = "100g",
+                                protein = null,
+                                carbs = null,
+                                fat = null
+                            )
+                        )
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -224,15 +410,22 @@ class FoodScannerViewModel @Inject constructor(
     
     fun saveAllFoods() {
         viewModelScope.launch {
-            val user = userDao.getCurrentUser().first() ?: return@launch
-            val today = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
+            // Prevent duplicate saves
+            if (_uiState.value.saveSuccess) {
+                return@launch
+            }
             
-            _uiState.value.recognizedFoods.forEach { recognizedFood ->
+            val user = userDao.getCurrentUser().first() ?: return@launch
+            val calendar = Calendar.getInstance()
+            calendar.set(Calendar.HOUR_OF_DAY, 0)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            val today = calendar.timeInMillis
+            
+            val foodsToSave = _uiState.value.recognizedFoods.toList() // Create copy to prevent concurrent modification
+            
+            foodsToSave.forEach { recognizedFood ->
                 // Create or find food item
                 val foodItem = FoodItem(
                     name = recognizedFood.name,
@@ -247,7 +440,8 @@ class FoodScannerViewModel @Inject constructor(
                 
                 val foodId = foodDao.insertFoodItem(foodItem)
                 
-                // Create meal entry
+                // Create meal entry with current timestamp
+                val now = System.currentTimeMillis()
                 val mealEntry = MealEntry(
                     userId = user.id,
                     foodItemId = foodId,
@@ -258,7 +452,8 @@ class FoodScannerViewModel @Inject constructor(
                     proteinCalculated = recognizedFood.protein ?: 0.0,
                     carbsCalculated = recognizedFood.carbs ?: 0.0,
                     fatCalculated = recognizedFood.fat ?: 0.0,
-                    source = "scanner"
+                    source = "scanner",
+                    timestamp = now
                 )
                 
                 foodDao.insertMealEntry(mealEntry)
@@ -267,7 +462,8 @@ class FoodScannerViewModel @Inject constructor(
             _uiState.update { 
                 it.copy(
                     saveSuccess = true,
-                    scanMode = ScanMode.CAMERA
+                    scanMode = ScanMode.CAMERA,
+                    recognizedFoods = emptyList() // Clear after saving
                 )
             }
         }
@@ -276,12 +472,12 @@ class FoodScannerViewModel @Inject constructor(
     fun addManualFood() {
         viewModelScope.launch {
             val user = userDao.getCurrentUser().first() ?: return@launch
-            val today = Calendar.getInstance().apply {
-                set(Calendar.HOUR_OF_DAY, 0)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }.timeInMillis
+            val calendar = Calendar.getInstance()
+            calendar.set(Calendar.HOUR_OF_DAY, 0)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            val today = calendar.timeInMillis
             
             val calories = manualCalories.toDoubleOrNull() ?: 0.0
             val protein = manualProtein.toDoubleOrNull() ?: 0.0
@@ -302,7 +498,8 @@ class FoodScannerViewModel @Inject constructor(
             
             val foodId = foodDao.insertFoodItem(foodItem)
             
-            // Create meal entry
+            // Create meal entry with current timestamp
+            val now = System.currentTimeMillis()
             val mealEntry = MealEntry(
                 userId = user.id,
                 foodItemId = foodId,
@@ -313,7 +510,8 @@ class FoodScannerViewModel @Inject constructor(
                 proteinCalculated = protein,
                 carbsCalculated = carbs,
                 fatCalculated = fat,
-                source = "manual"
+                source = "manual",
+                timestamp = now
             )
             
             foodDao.insertMealEntry(mealEntry)

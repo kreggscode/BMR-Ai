@@ -302,6 +302,15 @@ fun NavigationHost(
         composable(Screen.Onboarding.route) {
             OnboardingScreen(navController)
         }
+        composable(Screen.WaterTracking.route) {
+            WaterTrackingScreen(navController)
+        }
+        composable(Screen.FoodLogs.route) {
+            FoodLogsScreen(navController)
+        }
+        composable(Screen.SleepTracking.route) {
+            SleepTrackingScreen(navController)
+        }
     }
 }
 
@@ -363,4 +372,7 @@ sealed class Screen(val route: String) {
     object Progress : Screen("progress")
     object Settings : Screen("settings")
     object Onboarding : Screen("onboarding")
+    object WaterTracking : Screen("water_tracking")
+    object FoodLogs : Screen("food_logs")
+    object SleepTracking : Screen("sleep_tracking")
 }
