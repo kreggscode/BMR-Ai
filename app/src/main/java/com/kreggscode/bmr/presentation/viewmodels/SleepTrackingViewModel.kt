@@ -29,7 +29,7 @@ class SleepTrackingViewModel @Inject constructor(
         viewModelScope.launch {
             userDao.getCurrentUser().collect { user ->
                 user?.let { profile ->
-                    // Load today's sleep record
+                    // Load today's sleep record - use Flow to get real-time updates
                     val today = Calendar.getInstance().apply {
                         set(Calendar.HOUR_OF_DAY, 0)
                         set(Calendar.MINUTE, 0)
@@ -37,9 +37,7 @@ class SleepTrackingViewModel @Inject constructor(
                         set(Calendar.MILLISECOND, 0)
                     }.timeInMillis
                     
-                    val todayRecord = sleepDao.getSleepRecordByDate(profile.id, today)
-                    
-                    // Load weekly data (last 7 days)
+                    // Load weekly data (last 7 days) - this Flow will automatically update when DB changes
                     val sevenDaysAgo = Calendar.getInstance().apply {
                         add(Calendar.DAY_OF_YEAR, -6)
                         set(Calendar.HOUR_OF_DAY, 0)
@@ -56,6 +54,9 @@ class SleepTrackingViewModel @Inject constructor(
                     }.timeInMillis
                     
                     sleepDao.getSleepRecordsByDateRange(profile.id, sevenDaysAgo, todayEnd).collect { records ->
+                        // Get today's record from the records list (updates automatically when DB changes)
+                        val currentTodayRecord = records.find { it.date == today }
+                        
                         val weeklyData = (0..6).map { dayOffset ->
                             val calendar = Calendar.getInstance().apply {
                                 add(Calendar.DAY_OF_YEAR, -dayOffset)
@@ -85,13 +86,13 @@ class SleepTrackingViewModel @Inject constructor(
                         
                         _uiState.update { state ->
                             state.copy(
-                                todaySleepHours = todayRecord?.sleepHours ?: 0.0,
-                                todayBedtime = todayRecord?.bedtime,
-                                todayWakeTime = todayRecord?.wakeTime,
-                                todayQuality = todayRecord?.quality ?: 0,
+                                todaySleepHours = currentTodayRecord?.sleepHours ?: 0.0,
+                                todayBedtime = currentTodayRecord?.bedtime,
+                                todayWakeTime = currentTodayRecord?.wakeTime,
+                                todayQuality = currentTodayRecord?.quality ?: 0,
                                 weeklySleepData = weeklyData,
                                 averageSleepHours = avgSleep,
-                                hasTodayRecord = todayRecord != null
+                                hasTodayRecord = currentTodayRecord != null
                             )
                         }
                     }
@@ -111,8 +112,13 @@ class SleepTrackingViewModel @Inject constructor(
             }
             val today = calendar.timeInMillis
             
-            // Calculate sleep hours
-            val sleepDuration = wakeTime - bedtime
+            // Calculate sleep hours - handle midnight crossing
+            val sleepDuration = if (wakeTime < bedtime) {
+                // Wake time is next day (crossed midnight)
+                (24 * 60 * 60 * 1000) - bedtime + wakeTime
+            } else {
+                wakeTime - bedtime
+            }
             val sleepHours = (sleepDuration / (1000.0 * 60 * 60)).coerceIn(0.0, 24.0)
             
             val sleepRecord = SleepRecord(
@@ -129,7 +135,7 @@ class SleepTrackingViewModel @Inject constructor(
         }
     }
     
-    fun updateTodaySleep(bedtime: Long? = null, wakeTime: Long? = null, quality: Int? = null, notes: String? = null) {
+    fun updateTodaySleep(bedtime: Long? = null, wakeTime: Long? = null, quality: Int? = null, notes: String? = null, sleepHours: Double? = null) {
         viewModelScope.launch {
             val user = userDao.getCurrentUser().firstOrNull() ?: return@launch
             val today = Calendar.getInstance().apply {
@@ -142,35 +148,80 @@ class SleepTrackingViewModel @Inject constructor(
             val existing = sleepDao.getSleepRecordByDate(user.id, today)
             
             if (existing != null) {
+                val calculatedHours = if (sleepHours != null) {
+                    // Use direct sleep hours if provided (from slider)
+                    sleepHours
+                } else if (bedtime != null && wakeTime != null) {
+                    // Calculate from bedtime/wake time
+                    val sleepDuration = if (wakeTime < bedtime) {
+                        (24 * 60 * 60 * 1000) - bedtime + wakeTime
+                    } else {
+                        wakeTime - bedtime
+                    }
+                    (sleepDuration / (1000.0 * 60 * 60)).coerceIn(0.0, 24.0)
+                } else {
+                    existing.sleepHours
+                }
+                
                 val updated = existing.copy(
                     bedtime = bedtime ?: existing.bedtime,
                     wakeTime = wakeTime ?: existing.wakeTime,
                     quality = quality ?: existing.quality,
                     notes = notes ?: existing.notes,
-                    sleepHours = if (bedtime != null && wakeTime != null) {
-                        val sleepDuration = wakeTime - bedtime
-                        (sleepDuration / (1000.0 * 60 * 60)).coerceIn(0.0, 24.0)
-                    } else {
-                        existing.sleepHours
-                    }
+                    sleepHours = calculatedHours
                 )
                 sleepDao.updateSleepRecord(updated)
+                
+                // Immediately update UI state for instant feedback
+                _uiState.update { state ->
+                    state.copy(
+                        todaySleepHours = calculatedHours,
+                        todayBedtime = bedtime ?: existing.bedtime,
+                        todayWakeTime = wakeTime ?: existing.wakeTime,
+                        hasTodayRecord = true
+                    )
+                }
+                
+                // Reload data to ensure progress screen gets updated
+                loadSleepData()
             } else {
                 // Create new record if doesn't exist
-                if (bedtime != null && wakeTime != null) {
-                    val sleepDuration = wakeTime - bedtime
-                    val sleepHours = (sleepDuration / (1000.0 * 60 * 60)).coerceIn(0.0, 24.0)
-                    val sleepRecord = SleepRecord(
-                        userId = user.id,
-                        date = today,
-                        sleepHours = sleepHours,
-                        bedtime = bedtime,
-                        wakeTime = wakeTime,
-                        quality = quality ?: 3,
-                        notes = notes
-                    )
-                    sleepDao.insertSleepRecord(sleepRecord)
+                val calculatedHours = if (sleepHours != null) {
+                    sleepHours
+                } else if (bedtime != null && wakeTime != null) {
+                    val sleepDuration = if (wakeTime < bedtime) {
+                        (24 * 60 * 60 * 1000) - bedtime + wakeTime
+                    } else {
+                        wakeTime - bedtime
+                    }
+                    (sleepDuration / (1000.0 * 60 * 60)).coerceIn(0.0, 24.0)
+                } else {
+                    0.0
                 }
+                
+                val sleepRecord = SleepRecord(
+                    userId = user.id,
+                    date = today,
+                    sleepHours = calculatedHours,
+                    bedtime = bedtime ?: System.currentTimeMillis(),
+                    wakeTime = wakeTime ?: System.currentTimeMillis(),
+                    quality = quality ?: 3,
+                    notes = notes
+                )
+                sleepDao.insertSleepRecord(sleepRecord)
+                
+                // Immediately update UI state for instant feedback
+                _uiState.update { state ->
+                    state.copy(
+                        todaySleepHours = calculatedHours,
+                        todayBedtime = bedtime ?: System.currentTimeMillis(),
+                        todayWakeTime = wakeTime ?: System.currentTimeMillis(),
+                        hasTodayRecord = true
+                    )
+                }
+                
+                // Reload data to ensure progress screen gets updated
+                loadSleepData()
             }
         }
     }

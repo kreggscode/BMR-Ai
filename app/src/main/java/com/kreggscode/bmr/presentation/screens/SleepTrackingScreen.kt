@@ -26,6 +26,8 @@ import com.kreggscode.bmr.ui.components.*
 import com.kreggscode.bmr.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 
 @Composable
 fun SleepTrackingScreen(
@@ -35,8 +37,6 @@ fun SleepTrackingScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     
-    var showBedtimeDialog by remember { mutableStateOf(false) }
-    var showWakeTimeDialog by remember { mutableStateOf(false) }
     var showQualityDialog by remember { mutableStateOf(false) }
     
     Box(
@@ -68,9 +68,10 @@ fun SleepTrackingScreen(
                 wakeTime = uiState.todayWakeTime,
                 quality = uiState.todayQuality,
                 hasRecord = uiState.hasTodayRecord,
-                onLogBedtime = { showBedtimeDialog = true },
-                onLogWakeTime = { showWakeTimeDialog = true },
-                onSetQuality = { showQualityDialog = true }
+                onLogBedtime = { },
+                onLogWakeTime = { },
+                onSetQuality = { showQualityDialog = true },
+                viewModel = viewModel
             )
             
             Spacer(modifier = Modifier.height(24.dp))
@@ -104,40 +105,6 @@ fun SleepTrackingScreen(
     }
     
     // Dialogs
-    if (showBedtimeDialog) {
-        TimePickerDialog(
-            title = "Set Bedtime",
-            onDismiss = { showBedtimeDialog = false },
-            onTimeSelected = { hour, minute ->
-                val calendar = Calendar.getInstance().apply {
-                    set(Calendar.HOUR_OF_DAY, hour)
-                    set(Calendar.MINUTE, minute)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                viewModel.updateTodaySleep(bedtime = calendar.timeInMillis)
-                showBedtimeDialog = false
-            }
-        )
-    }
-    
-    if (showWakeTimeDialog) {
-        TimePickerDialog(
-            title = "Set Wake Time",
-            onDismiss = { showWakeTimeDialog = false },
-            onTimeSelected = { hour, minute ->
-                val calendar = Calendar.getInstance().apply {
-                    set(Calendar.HOUR_OF_DAY, hour)
-                    set(Calendar.MINUTE, minute)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                viewModel.updateTodaySleep(wakeTime = calendar.timeInMillis)
-                showWakeTimeDialog = false
-            }
-        )
-    }
-    
     if (showQualityDialog) {
         QualityPickerDialog(
             onDismiss = { showQualityDialog = false },
@@ -201,7 +168,8 @@ private fun TodaySleepCard(
     hasRecord: Boolean,
     onLogBedtime: () -> Unit,
     onLogWakeTime: () -> Unit,
-    onSetQuality: () -> Unit
+    onSetQuality: () -> Unit,
+    viewModel: SleepTrackingViewModel
 ) {
     GlassmorphicCard(
         modifier = Modifier.fillMaxWidth(),
@@ -220,13 +188,19 @@ private fun TodaySleepCard(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Sleep Hours Display
+            // Sleep Hours Slider - moved up to use its value for display
+            var sliderHours by remember { mutableStateOf(sleepHours) }
+            LaunchedEffect(sleepHours) {
+                sliderHours = sleepHours
+            }
+            
+            // Sleep Hours Display - uses sliderHours for immediate update
             Box(
                 modifier = Modifier.size(150.dp),
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
-                    progress = (sleepHours / 9.0).coerceIn(0.0, 1.0).toFloat(),
+                    progress = (sliderHours / 9.0).coerceIn(0.0, 1.0).toFloat(),
                     modifier = Modifier.fillMaxSize(),
                     color = PrimaryIndigo,
                     strokeWidth = 12.dp,
@@ -236,7 +210,7 @@ private fun TodaySleepCard(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = if (sleepHours > 0) "${String.format("%.1f", sleepHours)}" else "--",
+                        text = if (sliderHours > 0) "${String.format("%.1f", sliderHours)}" else "--",
                         style = MaterialTheme.typography.headlineLarge,
                         fontWeight = FontWeight.Bold,
                         color = PrimaryIndigo
@@ -251,22 +225,63 @@ private fun TodaySleepCard(
             
             Spacer(modifier = Modifier.height(24.dp))
             
-            // Bedtime and Wake Time
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                SleepTimeButton(
-                    label = "Bedtime",
-                    time = bedtime,
-                    onClick = onLogBedtime,
-                    icon = Icons.Default.Bedtime
+                Text(
+                    text = "Sleep Hours",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                SleepTimeButton(
-                    label = "Wake Time",
-                    time = wakeTime,
-                    onClick = onLogWakeTime,
-                    icon = Icons.Default.Alarm
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "0h",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${sliderHours.toInt()}h",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryIndigo
+                    )
+                    Text(
+                        text = "12h",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                
+                Slider(
+                    value = sliderHours.toFloat(),
+                    onValueChange = { newValue ->
+                        sliderHours = newValue.toDouble()
+                        // Save sleep hours directly from slider
+                        val now = System.currentTimeMillis()
+                        val estimatedBedtime = now - (sliderHours * 60 * 60 * 1000).toLong()
+                        viewModel.updateTodaySleep(
+                            bedtime = estimatedBedtime,
+                            wakeTime = now,
+                            quality = if (quality > 0) quality else 3,
+                            sleepHours = sliderHours // Pass sleep hours directly
+                        )
+                    },
+                    valueRange = 0f..12f,
+                    steps = 23, // 0.5 hour increments
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = PrimaryIndigo,
+                        activeTrackColor = PrimaryIndigo,
+                        inactiveTrackColor = PrimaryIndigo.copy(alpha = 0.3f)
+                    )
                 )
             }
             
@@ -277,16 +292,6 @@ private fun TodaySleepCard(
                 quality = quality,
                 onClick = onSetQuality
             )
-            
-            if (!hasRecord) {
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Tap buttons above to log your sleep",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
-            }
         }
     }
 }

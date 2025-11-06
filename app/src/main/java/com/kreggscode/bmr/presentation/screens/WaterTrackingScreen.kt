@@ -3,11 +3,13 @@ package com.kreggscode.bmr.presentation.screens
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -289,6 +291,8 @@ private fun QuickAddWaterButtons(
             modifier = Modifier.fillMaxWidth()
         ) {
             glassSizes.forEach { glassSize ->
+                val interactionSource = remember { MutableInteractionSource() }
+                
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -299,7 +303,13 @@ private fun QuickAddWaterButtons(
                                 colors = listOf(AccentSky.copy(alpha = 0.2f), PrimaryTeal.copy(alpha = 0.1f))
                             )
                         )
-                        .clickable { onAddWater(glassSize.size) }
+                        .clickable(
+                            indication = rememberRipple(bounded = true),
+                            interactionSource = interactionSource
+                        ) { 
+                            android.util.Log.d("WaterTracking", "Button clicked for ${glassSize.size}ml")
+                            onAddWater(glassSize.size) 
+                        }
                         .padding(vertical = 12.dp, horizontal = 8.dp)
                 ) {
                     Icon(

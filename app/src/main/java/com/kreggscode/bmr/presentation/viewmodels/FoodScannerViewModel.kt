@@ -408,6 +408,19 @@ class FoodScannerViewModel @Inject constructor(
         }
     }
     
+    fun updateFoodName(index: Int, newName: String) {
+        _uiState.update { state ->
+            val updatedFoods = state.recognizedFoods.toMutableList()
+            if (index >= 0 && index < updatedFoods.size) {
+                val food = updatedFoods[index]
+                updatedFoods[index] = food.copy(name = newName)
+                state.copy(recognizedFoods = updatedFoods)
+            } else {
+                state
+            }
+        }
+    }
+    
     fun saveAllFoods() {
         viewModelScope.launch {
             // Prevent duplicate saves
@@ -415,7 +428,29 @@ class FoodScannerViewModel @Inject constructor(
                 return@launch
             }
             
-            val user = userDao.getCurrentUser().first() ?: return@launch
+            var user = userDao.getCurrentUser().firstOrNull()
+            
+            // If no user exists, create a default user
+            if (user == null) {
+                val calendar = Calendar.getInstance()
+                calendar.add(Calendar.YEAR, -30) // Default age 30
+                
+                user = com.kreggscode.bmr.data.local.entities.UserProfile(
+                    name = "User",
+                    dateOfBirth = calendar.timeInMillis,
+                    sex = "male",
+                    heightCm = 175.0,
+                    weightKg = 70.0,
+                    activityLevel = "moderate",
+                    units = "metric",
+                    goalType = "maintain",
+                    goalRate = 0.0,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis()
+                )
+                val userId = userDao.insertUser(user)
+                user = user.copy(id = userId)
+            }
             val calendar = Calendar.getInstance()
             calendar.set(Calendar.HOUR_OF_DAY, 0)
             calendar.set(Calendar.MINUTE, 0)
@@ -459,6 +494,9 @@ class FoodScannerViewModel @Inject constructor(
                 foodDao.insertMealEntry(mealEntry)
             }
             
+            // Ensure database writes are committed before updating UI
+            kotlinx.coroutines.delay(300)
+            
             _uiState.update { 
                 it.copy(
                     saveSuccess = true,
@@ -471,7 +509,29 @@ class FoodScannerViewModel @Inject constructor(
     
     fun addManualFood() {
         viewModelScope.launch {
-            val user = userDao.getCurrentUser().first() ?: return@launch
+            var user = userDao.getCurrentUser().firstOrNull()
+            
+            // If no user exists, create a default user
+            if (user == null) {
+                val calendar = Calendar.getInstance()
+                calendar.add(Calendar.YEAR, -30) // Default age 30
+                
+                user = com.kreggscode.bmr.data.local.entities.UserProfile(
+                    name = "User",
+                    dateOfBirth = calendar.timeInMillis,
+                    sex = "male",
+                    heightCm = 175.0,
+                    weightKg = 70.0,
+                    activityLevel = "moderate",
+                    units = "metric",
+                    goalType = "maintain",
+                    goalRate = 0.0,
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis()
+                )
+                val userId = userDao.insertUser(user)
+                user = user.copy(id = userId)
+            }
             val calendar = Calendar.getInstance()
             calendar.set(Calendar.HOUR_OF_DAY, 0)
             calendar.set(Calendar.MINUTE, 0)

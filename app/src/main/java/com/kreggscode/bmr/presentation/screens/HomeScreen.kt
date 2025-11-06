@@ -44,6 +44,60 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
     
+    // Refresh data when screen is focused
+    LaunchedEffect(Unit) {
+        viewModel.refreshTodayStats()
+    }
+    
+    // Show excess consumption alert
+    val showExcessAlert = remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.caloriesConsumed, uiState.targetCalories) {
+        if (uiState.caloriesConsumed > 0 && uiState.targetCalories > 0 && 
+            uiState.caloriesConsumed > uiState.targetCalories && !showExcessAlert.value) {
+            showExcessAlert.value = true
+        }
+    }
+    
+    if (showExcessAlert.value && uiState.caloriesConsumed > uiState.targetCalories) {
+        AlertDialog(
+            onDismissRequest = { showExcessAlert.value = false },
+            title = {
+                Text(
+                    text = "⚠️ Excess Consumption Alert",
+                    fontWeight = FontWeight.Bold,
+                    color = Error
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "You've consumed ${(uiState.caloriesConsumed - uiState.targetCalories).toInt()} calories ABOVE your target!",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Target: ${uiState.targetCalories.toInt()} kcal",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Consumed: ${uiState.caloriesConsumed.toInt()} kcal",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showExcessAlert.value = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = Error)
+                ) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -82,6 +136,7 @@ fun HomeScreen(
                 bmr = uiState.bmr,
                 caloriesConsumed = uiState.caloriesConsumed,
                 caloriesRemaining = uiState.caloriesRemaining,
+                targetCalories = uiState.targetCalories,
                 waterIntake = uiState.waterIntake,
                 onWaterIncrement = { navController.navigate(Screen.WaterTracking.route) },
                 navController = navController
@@ -289,6 +344,7 @@ private fun StatsGrid(
     bmr: Double,
     caloriesConsumed: Double,
     caloriesRemaining: Double,
+    targetCalories: Double,
     waterIntake: Int,
     onWaterIncrement: () -> Unit,
     navController: NavController
@@ -316,8 +372,16 @@ private fun StatsGrid(
             )
             
             StatCard(
-                title = "Consumed",
-                value = "${caloriesConsumed.toInt()}",
+                title = if (caloriesConsumed > 0 && targetCalories > 0 && caloriesConsumed > targetCalories) {
+                    "Excess"
+                } else {
+                    "Consumed"
+                },
+                value = if (caloriesConsumed > 0 && targetCalories > 0 && caloriesConsumed > targetCalories) {
+                    "+${(caloriesConsumed - targetCalories).toInt()}"
+                } else {
+                    "${caloriesConsumed.toInt()}"
+                },
                 subtitle = "kcal",
                 icon = {
                     Icon(
@@ -328,7 +392,11 @@ private fun StatsGrid(
                     )
                 },
                 modifier = Modifier.weight(1f),
-                gradientColors = listOf(PrimaryTeal, AccentMint),
+                gradientColors = if (caloriesConsumed > 0 && targetCalories > 0 && caloriesConsumed > targetCalories) {
+                    listOf(Error, AccentCoral)
+                } else {
+                    listOf(PrimaryTeal, AccentMint)
+                },
                 maxLines = 1
             )
         }

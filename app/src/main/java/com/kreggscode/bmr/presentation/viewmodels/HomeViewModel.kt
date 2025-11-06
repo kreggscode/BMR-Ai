@@ -68,6 +68,36 @@ class HomeViewModel @Inject constructor(
         }
     }
     
+    fun refreshTodayStats() {
+        viewModelScope.launch {
+            val user = userDao.getCurrentUser().firstOrNull()
+            user?.let { profile ->
+                val record = bmrDao.getLatestBMRRecord(profile.id).first()
+                val bmr = record?.bmrValue ?: 0.0
+                val targetCalories = record?.targetCalories ?: bmr
+                
+                // Get today's consumed calories
+                val today = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                
+                val consumed = foodDao.getTotalCaloriesForDate(profile.id, today) ?: 0.0
+                
+                _uiState.update { state ->
+                    state.copy(
+                        bmr = bmr,
+                        targetCalories = targetCalories,
+                        caloriesConsumed = consumed,
+                        caloriesRemaining = (targetCalories - consumed).coerceAtLeast(0.0)
+                    )
+                }
+            }
+        }
+    }
+    
     private fun loadTodayStats() {
         viewModelScope.launch {
             userDao.getCurrentUser().collect { user ->
@@ -76,7 +106,7 @@ class HomeViewModel @Inject constructor(
                         val bmr = record?.bmrValue ?: 0.0
                         val targetCalories = record?.targetCalories ?: bmr
                         
-                        // Get today's consumed calories
+                        // Get today's consumed calories - use Flow for real-time updates
                         val today = Calendar.getInstance().apply {
                             set(Calendar.HOUR_OF_DAY, 0)
                             set(Calendar.MINUTE, 0)
@@ -84,15 +114,18 @@ class HomeViewModel @Inject constructor(
                             set(Calendar.MILLISECOND, 0)
                         }.timeInMillis
                         
-                        val consumed = foodDao.getTotalCaloriesForDate(profile.id, today) ?: 0.0
-                        
-                        _uiState.update { state ->
-                            state.copy(
-                                bmr = bmr,
-                                targetCalories = targetCalories,
-                                caloriesConsumed = consumed,
-                                caloriesRemaining = (targetCalories - consumed).coerceAtLeast(0.0)
-                            )
+                        // Use Flow to get real-time updates
+                        foodDao.getMealsByDate(profile.id, today).collect { meals ->
+                            val consumed = meals.sumOf { it.caloriesCalculated }
+                            
+                            _uiState.update { state ->
+                                state.copy(
+                                    bmr = bmr,
+                                    targetCalories = targetCalories,
+                                    caloriesConsumed = consumed,
+                                    caloriesRemaining = (targetCalories - consumed).coerceAtLeast(0.0)
+                                )
+                            }
                         }
                     }
                 }

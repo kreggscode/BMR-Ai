@@ -2,6 +2,7 @@ package com.kreggscode.bmr.presentation.viewmodels
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.kreggscode.bmr.data.local.dao.BMRDao
 import com.kreggscode.bmr.data.local.dao.FoodDao
 import com.kreggscode.bmr.data.local.dao.UserDao
 import com.kreggscode.bmr.data.api.PollinationsAIService
@@ -18,6 +19,7 @@ import javax.inject.Inject
 class FoodLogsViewModel @Inject constructor(
     private val userDao: UserDao,
     private val foodDao: FoodDao,
+    private val bmrDao: BMRDao,
     private val aiService: PollinationsAIService
 ) : ViewModel() {
     
@@ -40,9 +42,34 @@ class FoodLogsViewModel @Inject constructor(
                         set(Calendar.MILLISECOND, 0)
                     }.timeInMillis
                     
-                    foodDao.getMealsByDate(profile.id, today).collect { meals ->
-                        val mealItems = meals.map { entry ->
-                            val foodItem = foodDao.getFoodItemById(entry.foodItemId)
+                    // Calculate weekly date range
+                    val sevenDaysAgo = Calendar.getInstance().apply {
+                        add(Calendar.DAY_OF_YEAR, -6)
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                    
+                    val todayEnd = Calendar.getInstance().apply {
+                        set(Calendar.HOUR_OF_DAY, 0)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }.timeInMillis
+                    
+                    // Load BMR record, today's meals, weekly meals, and all foods together
+                    combine(
+                        bmrDao.getLatestBMRRecord(profile.id),
+                        foodDao.getMealsByDate(profile.id, today),
+                        foodDao.getMealsByDateRange(profile.id, sevenDaysAgo, todayEnd),
+                        foodDao.getAllFoodItems()
+                    ) { bmrRecord, todayMeals, weeklyMeals, allFoods ->
+                        val targetCalories = bmrRecord?.targetCalories ?: 2000.0
+                        val foodMap = allFoods.associateBy { it.id }
+                        
+                        val mealItems = todayMeals.map { entry ->
+                            val foodItem = foodMap[entry.foodItemId]
                             MealLogItem(
                                 id = entry.id,
                                 foodName = foodItem?.name ?: "Unknown",
@@ -53,15 +80,51 @@ class FoodLogsViewModel @Inject constructor(
                                 carbs = entry.carbsCalculated,
                                 fat = entry.fatCalculated,
                                 date = entry.date,
+                                timestamp = entry.timestamp,
+                                source = entry.source,
                                 isFavorite = favoriteMealIds.contains(entry.id)
                             )
                         }
                         
                         // Calculate today's totals
-                        val totalCalories = meals.sumOf { it.caloriesCalculated }
-                        val totalProtein = meals.sumOf { it.proteinCalculated }
-                        val totalCarbs = meals.sumOf { it.carbsCalculated }
-                        val totalFat = meals.sumOf { it.fatCalculated }
+                        val totalCalories = todayMeals.sumOf { it.caloriesCalculated }
+                        val totalProtein = todayMeals.sumOf { it.proteinCalculated }
+                        val totalCarbs = todayMeals.sumOf { it.carbsCalculated }
+                        val totalFat = todayMeals.sumOf { it.fatCalculated }
+                        val remainingCalories = (targetCalories - totalCalories).coerceAtLeast(0.0)
+                        
+                        // Calculate weekly calorie data for tracker graph
+                        val weeklyData = (0..6).map { dayOffset ->
+                            val calendar = Calendar.getInstance().apply {
+                                add(Calendar.DAY_OF_YEAR, -dayOffset)
+                                set(Calendar.HOUR_OF_DAY, 0)
+                                set(Calendar.MINUTE, 0)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                            val dayDate = calendar.timeInMillis
+                            
+                            // Filter meals for this specific day (date field matches dayDate)
+                            val dayMeals = weeklyMeals.filter { 
+                                it.date == dayDate
+                            }
+                            val dayCalories = dayMeals.sumOf { it.caloriesCalculated }
+                            
+                            val dayLabel = when (dayOffset) {
+                                0 -> "Today"
+                                1 -> "Yesterday"
+                                else -> {
+                                    val dateFormat = SimpleDateFormat("MMM d", Locale.getDefault())
+                                    dateFormat.format(calendar.time)
+                                }
+                            }
+                            
+                            DailyCalorieData(
+                                date = dayDate,
+                                calories = dayCalories,
+                                dayLabel = dayLabel
+                            )
+                        }.reversed() // Oldest to newest (left to right)
                         
                         _uiState.update { state ->
                             state.copy(
@@ -69,10 +132,13 @@ class FoodLogsViewModel @Inject constructor(
                                 todayTotalCalories = totalCalories,
                                 todayTotalProtein = totalProtein,
                                 todayTotalCarbs = totalCarbs,
-                                todayTotalFat = totalFat
+                                todayTotalFat = totalFat,
+                                targetCalories = targetCalories,
+                                caloriesRemaining = remainingCalories,
+                                weeklyCalorieData = weeklyData
                             )
                         }
-                    }
+                    }.collect { }
                     
                     // Load history (last 30 days, excluding today)
                     val thirtyDaysAgo = Calendar.getInstance().apply {
@@ -105,65 +171,15 @@ class FoodLogsViewModel @Inject constructor(
                                 carbs = entry.carbsCalculated,
                                 fat = entry.fatCalculated,
                                 date = entry.date,
+                                timestamp = entry.timestamp,
+                                source = entry.source,
                                 isFavorite = favoriteMealIds.contains(entry.id)
                             )
                         }.sortedByDescending { it.date } // Sort by date descending (newest first)
                         
-                        // Calculate weekly calorie data for tracker graph
-                        val sevenDaysAgo = Calendar.getInstance().apply {
-                            add(Calendar.DAY_OF_YEAR, -6)
-                            set(Calendar.HOUR_OF_DAY, 0)
-                            set(Calendar.MINUTE, 0)
-                            set(Calendar.SECOND, 0)
-                            set(Calendar.MILLISECOND, 0)
-                        }.timeInMillis
-                        
-                        val todayEnd = Calendar.getInstance().apply {
-                            set(Calendar.HOUR_OF_DAY, 23)
-                            set(Calendar.MINUTE, 59)
-                            set(Calendar.SECOND, 59)
-                            set(Calendar.MILLISECOND, 999)
-                        }.timeInMillis
-                        
-                        val allMealsForWeek = foodDao.getMealsByDateRange(profile.id, sevenDaysAgo, todayEnd).first()
-                        
-                        val weeklyData = (0..6).map { dayOffset ->
-                            val calendar = Calendar.getInstance().apply {
-                                add(Calendar.DAY_OF_YEAR, -dayOffset)
-                                set(Calendar.HOUR_OF_DAY, 0)
-                                set(Calendar.MINUTE, 0)
-                                set(Calendar.SECOND, 0)
-                                set(Calendar.MILLISECOND, 0)
-                            }
-                            val dayStart = calendar.timeInMillis
-                            calendar.set(Calendar.HOUR_OF_DAY, 23)
-                            calendar.set(Calendar.MINUTE, 59)
-                            calendar.set(Calendar.SECOND, 59)
-                            calendar.set(Calendar.MILLISECOND, 999)
-                            val dayEnd = calendar.timeInMillis
-                            
-                            val dayMeals = allMealsForWeek.filter { 
-                                it.date >= dayStart && it.date <= dayEnd 
-                            }
-                            val dayCalories = dayMeals.sumOf { it.caloriesCalculated }
-                            
-                            val dayLabel = when (dayOffset) {
-                                0 -> "Today"
-                                1 -> "Yesterday"
-                                else -> SimpleDateFormat("EEE", Locale.getDefault()).format(calendar.time)
-                            }
-                            
-                            DailyCalorieData(
-                                date = dayStart,
-                                calories = dayCalories,
-                                dayLabel = dayLabel
-                            )
-                        }.reversed()
-                        
                         _uiState.update { state ->
                             state.copy(
-                                historyMeals = mealItems,
-                                weeklyCalorieData = weeklyData
+                                historyMeals = mealItems
                             )
                         }
                     }
@@ -337,6 +353,8 @@ data class FoodLogsUiState(
     val todayTotalProtein: Double = 0.0,
     val todayTotalCarbs: Double = 0.0,
     val todayTotalFat: Double = 0.0,
+    val targetCalories: Double = 2000.0,
+    val caloriesRemaining: Double = 2000.0,
     val weeklyCalorieData: List<DailyCalorieData> = emptyList()
 )
 

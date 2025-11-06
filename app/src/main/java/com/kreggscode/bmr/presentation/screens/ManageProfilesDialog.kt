@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -31,8 +32,14 @@ fun ManageProfilesDialog(
     onSwitchProfile: (Long) -> Unit,
     onDeleteProfile: (Long) -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
+    
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         title = { 
             Text(
                 "Manage Profiles",

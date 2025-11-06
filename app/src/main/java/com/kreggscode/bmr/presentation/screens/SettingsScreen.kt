@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -592,8 +593,14 @@ private fun EditNameDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
+    
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         title = { Text("Edit Name") },
         text = {
             OutlinedTextField(
@@ -601,7 +608,16 @@ private fun EditNameDialog(
                 onValueChange = onNameChange,
                 label = { Text("Name") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = colors.onSurface,
+                    unfocusedTextColor = colors.onSurface,
+                    focusedLabelColor = colors.primary,
+                    unfocusedLabelColor = colors.onSurfaceVariant,
+                    focusedBorderColor = colors.primary,
+                    unfocusedBorderColor = colors.outline,
+                    cursorColor = colors.primary
+                )
             )
         },
         confirmButton = {
@@ -623,8 +639,14 @@ private fun UnitsDialog(
     onDismiss: () -> Unit,
     onSelect: (Boolean) -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
+    
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         title = { Text("Select Units") },
         text = {
             Column {
@@ -673,9 +695,14 @@ private fun LanguageDialog(
     onSelect: (String) -> Unit
 ) {
     val languages = listOf("English", "Spanish", "French", "German", "Chinese", "Japanese")
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
     
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         title = { Text("Select Language") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
@@ -712,9 +739,14 @@ private fun DietaryDialog(
     onSelect: (String) -> Unit
 ) {
     val preferences = listOf("None", "Vegetarian", "Vegan", "Keto", "Paleo", "Gluten-Free", "Dairy-Free")
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
     
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         title = { Text("Dietary Preferences") },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
@@ -753,9 +785,14 @@ private fun ReminderTimeDialog(
 ) {
     var selectedHour by remember { mutableStateOf(currentHour) }
     var selectedMinute by remember { mutableStateOf(currentMinute) }
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
     
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         title = { Text("Set Reminder Time") },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -826,8 +863,14 @@ private fun ClearDataDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
+    
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         icon = {
             Icon(
                 imageVector = Icons.Default.Warning,
@@ -884,20 +927,37 @@ private fun CreateProfileDialog(
     var height by remember { mutableStateOf("") }
     var weight by remember { mutableStateOf("") }
     
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
+    
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         title = { Text("Create New Profile") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                val textFieldColors = OutlinedTextFieldDefaults.colors(
+                    focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                    focusedLabelColor = MaterialTheme.colorScheme.primary,
+                    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    cursorColor = MaterialTheme.colorScheme.primary
+                )
+                
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Name") },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = textFieldColors
                 )
                 
                 OutlinedTextField(
@@ -906,7 +966,8 @@ private fun CreateProfileDialog(
                     label = { Text("Age") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = textFieldColors
                 )
                 
                 // Sex selector
@@ -934,7 +995,8 @@ private fun CreateProfileDialog(
                     label = { Text("Height (cm)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = textFieldColors
                 )
                 
                 OutlinedTextField(
@@ -943,7 +1005,8 @@ private fun CreateProfileDialog(
                     label = { Text("Weight (kg)") },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = textFieldColors
                 )
             }
         },

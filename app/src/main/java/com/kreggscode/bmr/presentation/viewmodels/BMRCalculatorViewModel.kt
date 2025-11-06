@@ -210,18 +210,29 @@ class BMRCalculatorViewModel @Inject constructor(
                     fatGrams = state.fatGrams
                 )
                 
+                // Check if this is the first BMR calculation (no existing records)
+                val existingRecords = bmrDao.getUserBMRRecords(user.id).firstOrNull() ?: emptyList()
+                val isFirstBMR = existingRecords.isEmpty()
+                
                 bmrDao.insertBMRRecord(bmrRecord)
                 
                 // Update user profile
+                val newWeight = state.weight.toDoubleOrNull() ?: user.weightKg
                 val updatedUser = user.copy(
                     heightCm = state.height.toDoubleOrNull() ?: user.heightCm,
-                    weightKg = state.weight.toDoubleOrNull() ?: user.weightKg,
+                    weightKg = newWeight,
                     activityLevel = state.activityLevel,
                     goalType = state.goal,
                     updatedAt = System.currentTimeMillis()
                 )
                 
                 userDao.updateUser(updatedUser)
+                
+                // If this is the first BMR calculation, store this weight as the starting weight
+                // This will be used for weight loss tracking
+                if (isFirstBMR) {
+                    android.util.Log.d("BMRCalculator", "First BMR calculation - starting weight: $newWeight kg")
+                }
                 
                 _uiState.update { 
                     it.copy(

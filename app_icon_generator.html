@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BMR App Icon Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 800px;
+            width: 100%;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .canvas-container {
+            display: flex;
+            justify-content: center;
+            margin: 30px 0;
+        }
+        
+        canvas {
+            border: 4px solid #667eea;
+            border-radius: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            background: white;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        label {
+            font-weight: 600;
+            color: #444;
+            font-size: 0.9em;
+        }
+        
+        input[type="color"] {
+            width: 100%;
+            height: 50px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            cursor: pointer;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb:hover {
+            background: #5568d3;
+            transform: scale(1.1);
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+        
+        #bmrSizeValue {
+            color: #667eea;
+            font-weight: 700;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            color: white;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        
+        .btn-secondary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
+        
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
+        }
+        
+        .preview {
+            text-align: center;
+            margin-top: 20px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 12px;
+        }
+        
+        .download-link {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        
+        .download-link:hover {
+            background: #5568d3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 BMR App Icon Generator</h1>
+        <p class="subtitle">Create a stunning 512x512 app icon for your BMR application</p>
+        
+        <div class="canvas-container">
+            <canvas id="iconCanvas" width="512" height="512"></canvas>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>Primary Color</label>
+                <input type="color" id="primaryColor" value="#667eea">
+            </div>
+            <div class="control-group">
+                <label>Secondary Color</label>
+                <input type="color" id="secondaryColor" value="#764ba2">
+            </div>
+            <div class="control-group">
+                <label>Icon Style</label>
+                <select id="iconStyle" style="padding: 10px; border: 2px solid #ddd; border-radius: 8px;">
+                    <option value="gradient">Gradient Circle</option>
+                    <option value="modern">Modern Square</option>
+                    <option value="rounded">Rounded Square</option>
+                    <option value="minimal">Minimal</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>BMR Text Size: <span id="bmrSizeValue">140</span>px</label>
+                <input type="range" id="bmrSize" min="80" max="200" value="140" step="5">
+            </div>
+        </div>
+        
+        <div class="button-group">
+            <button class="btn-primary" onclick="generateIcon()">🔄 Regenerate Icon</button>
+            <button class="btn-secondary" onclick="randomizeColors()">🎲 Random Colors</button>
+            <button class="btn-success" onclick="downloadIcon()">💾 Download Icon</button>
+        </div>
+        
+        <div class="preview">
+            <h3>Icon Preview</h3>
+            <p>Click "Download Icon" to save as PNG (512x512)</p>
+        </div>
+    </div>
+    
+    <script>
+        const canvas = document.getElementById('iconCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function generateIcon() {
+            const primaryColor = document.getElementById('primaryColor').value;
+            const secondaryColor = document.getElementById('secondaryColor').value;
+            const style = document.getElementById('iconStyle').value;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, 512, 512);
+            
+            const bmrSize = parseInt(document.getElementById('bmrSize').value);
+            
+            if (style === 'gradient') {
+                // Gradient circle background - reduced padding
+                const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+                gradient.addColorStop(0, primaryColor);
+                gradient.addColorStop(1, secondaryColor);
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(256, 256, 250, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Enhanced inner circle for depth
+                const innerGradient = ctx.createRadialGradient(256, 200, 0, 256, 256, 220);
+                innerGradient.addColorStop(0, 'rgba(255,255,255,0.4)');
+                innerGradient.addColorStop(0.5, 'rgba(255,255,255,0.1)');
+                innerGradient.addColorStop(1, 'rgba(0,0,0,0.2)');
+                ctx.fillStyle = innerGradient;
+                ctx.beginPath();
+                ctx.arc(256, 256, 220, 0, Math.PI * 2);
+                ctx.fill();
+                
+            } else if (style === 'modern') {
+                // Modern square with rounded corners - reduced padding
+                const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+                gradient.addColorStop(0, primaryColor);
+                gradient.addColorStop(1, secondaryColor);
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                roundRect(ctx, 16, 16, 480, 480, 90);
+                ctx.fill();
+                
+                // Add subtle highlight
+                const highlightGradient = ctx.createLinearGradient(0, 0, 512, 200);
+                highlightGradient.addColorStop(0, 'rgba(255,255,255,0.2)');
+                highlightGradient.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = highlightGradient;
+                ctx.beginPath();
+                roundRect(ctx, 16, 16, 480, 240, 90);
+                ctx.fill();
+                
+            } else if (style === 'rounded') {
+                // Rounded square - reduced padding
+                const gradient = ctx.createLinearGradient(0, 0, 512, 512);
+                gradient.addColorStop(0, primaryColor);
+                gradient.addColorStop(1, secondaryColor);
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                roundRect(ctx, 20, 20, 472, 472, 130);
+                ctx.fill();
+                
+                // Add subtle highlight
+                const highlightGradient = ctx.createLinearGradient(0, 0, 512, 250);
+                highlightGradient.addColorStop(0, 'rgba(255,255,255,0.25)');
+                highlightGradient.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = highlightGradient;
+                ctx.beginPath();
+                roundRect(ctx, 20, 20, 472, 250, 130);
+                ctx.fill();
+                
+            } else if (style === 'minimal') {
+                // Minimal style - larger circle
+                ctx.fillStyle = primaryColor;
+                ctx.beginPath();
+                ctx.arc(256, 256, 230, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Add subtle inner glow
+                const innerGradient = ctx.createRadialGradient(256, 220, 0, 256, 256, 230);
+                innerGradient.addColorStop(0, 'rgba(255,255,255,0.3)');
+                innerGradient.addColorStop(1, 'rgba(0,0,0,0.1)');
+                ctx.fillStyle = innerGradient;
+                ctx.beginPath();
+                ctx.arc(256, 256, 230, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Draw BMR text/icon with adjustable size
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${bmrSize}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Enhanced shadow effect
+            ctx.shadowColor = 'rgba(0,0,0,0.4)';
+            ctx.shadowBlur = 25;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 12;
+            ctx.fillText('BMR', 256, 256);
+            
+            // Enhanced glow effect
+            ctx.shadowColor = 'rgba(255,255,255,0.6)';
+            ctx.shadowBlur = 40;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctx.lineWidth = Math.max(4, bmrSize / 20);
+            ctx.strokeText('BMR', 256, 256);
+            
+            // Reset shadow
+            ctx.shadowColor = 'transparent';
+            ctx.shadowBlur = 0;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+        }
+        
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+        
+        function randomizeColors() {
+            const colors = [
+                ['#667eea', '#764ba2'],
+                ['#f093fb', '#f5576c'],
+                ['#4facfe', '#00f2fe'],
+                ['#43e97b', '#38f9d7'],
+                ['#fa709a', '#fee140'],
+                ['#30cfd0', '#330867'],
+                ['#a8edea', '#fed6e3'],
+                ['#ff9a9e', '#fecfef']
+            ];
+            const random = colors[Math.floor(Math.random() * colors.length)];
+            document.getElementById('primaryColor').value = random[0];
+            document.getElementById('secondaryColor').value = random[1];
+            generateIcon();
+        }
+        
+        function downloadIcon() {
+            const link = document.createElement('a');
+            link.download = 'bmr_app_icon_512x512.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+        
+        // Update BMR size display
+        document.getElementById('bmrSize').addEventListener('input', function() {
+            document.getElementById('bmrSizeValue').textContent = this.value;
+            generateIcon();
+        });
+        
+        // Event listeners
+        document.getElementById('primaryColor').addEventListener('input', generateIcon);
+        document.getElementById('secondaryColor').addEventListener('input', generateIcon);
+        document.getElementById('iconStyle').addEventListener('change', generateIcon);
+        
+        // Generate initial icon
+        generateIcon();
+    </script>
+</body>
+</html>
+

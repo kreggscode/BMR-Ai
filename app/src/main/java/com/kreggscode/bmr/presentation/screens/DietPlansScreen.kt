@@ -19,6 +19,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +28,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import com.kreggscode.bmr.ui.components.*
 import com.kreggscode.bmr.ui.theme.*
 
@@ -37,6 +44,7 @@ fun DietPlansScreen(
     val uiState by viewModel.uiState.collectAsState()
     var selectedDay by remember { mutableStateOf(0) }
     var showGenerateDialog by remember { mutableStateOf(false) }
+    var selectedTab by remember { mutableStateOf(0) } // 0 = Generate, 1 = Saved Plans
     
     val scrollState = rememberScrollState()
     
@@ -45,59 +53,169 @@ fun DietPlansScreen(
             .fillMaxSize()
             .systemBarsPadding()
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(horizontal = 20.dp)
-                .padding(bottom = 100.dp)
-        ) {
-            // Header
-            DietPlanHeader(
-                onBackClick = { navController.navigateUp() },
-                onGenerateClick = { viewModel.togglePlanDialog(true) }
-            )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Plan Type Selector
-            PlanTypeSelector(
-                selectedType = uiState.selectedPlanType,
-                onTypeSelect = viewModel::selectPlanType
-            )
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Current Plan Overview
-            CurrentPlanCard(
-                planType = uiState.selectedPlanType,
-                targetCalories = uiState.targetCalories,
-                proteinGrams = uiState.proteinGrams,
-                carbsGrams = uiState.carbsGrams,
-                fatGrams = uiState.fatGrams
-            )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Day Selector
-            DaySelector(
-                selectedDay = selectedDay,
-                onDaySelect = { selectedDay = it }
-            )
-            
-            Spacer(modifier = Modifier.height(20.dp))
-            
-            // Meals for Selected Day
-            DayMealPlan(
-                day = selectedDay,
-                planType = uiState.selectedPlanType,
-                generatedPlan = uiState.generatedPlan
-            )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            // Shopping List
-            ShoppingListCard(shoppingList = uiState.shoppingList)
+        when (selectedTab) {
+            0 -> {
+                // Generate Plan Tab - with scroll
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(scrollState)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 100.dp)
+                ) {
+                    // Header
+                    DietPlanHeader(
+                        onBackClick = { navController.navigateUp() },
+                        onGenerateClick = { viewModel.togglePlanDialog(true) }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Tab Selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TabButton(
+                            text = "Generate Plan",
+                            isSelected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            modifier = Modifier.weight(1f)
+                        )
+                        TabButton(
+                            text = "Saved Plans",
+                            isSelected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    // Generate with AI Button - Prominent and clear
+                    Button(
+                        onClick = { viewModel.togglePlanDialog(true) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(60.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = PrimaryTeal
+                        ),
+                        shape = RoundedCornerShape(16.dp),
+                        elevation = ButtonDefaults.buttonElevation(
+                            defaultElevation = 8.dp,
+                            pressedElevation = 4.dp
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SmartToy,
+                            contentDescription = null,
+                            modifier = Modifier.size(26.dp),
+                            tint = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text(
+                                text = "Generate Plan with AI",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Get personalized meal plans",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Plan Type Selector
+                    PlanTypeSelector(
+                        selectedType = uiState.selectedPlanType,
+                        onTypeSelect = viewModel::selectPlanType
+                    )
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    // Current Plan Overview
+                    CurrentPlanCard(
+                        planType = uiState.selectedPlanType,
+                        targetCalories = uiState.targetCalories,
+                        proteinGrams = uiState.proteinGrams,
+                        carbsGrams = uiState.carbsGrams,
+                        fatGrams = uiState.fatGrams
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Day Selector
+                    DaySelector(
+                        selectedDay = selectedDay,
+                        onDaySelect = { selectedDay = it }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    // Meals for Selected Day
+                    DayMealPlan(
+                        day = selectedDay,
+                        planType = uiState.selectedPlanType,
+                        generatedPlan = uiState.generatedPlan
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Shopping List
+                    ShoppingListCard(shoppingList = uiState.shoppingList)
+                }
+            }
+            1 -> {
+                // Saved Plans Tab - NO scroll on parent, LazyColumn handles it
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp)
+                ) {
+                    // Header
+                    DietPlanHeader(
+                        onBackClick = { navController.navigateUp() },
+                        onGenerateClick = { viewModel.togglePlanDialog(true) }
+                    )
+                    
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    // Tab Selector
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TabButton(
+                            text = "Generate Plan",
+                            isSelected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            modifier = Modifier.weight(1f)
+                        )
+                        TabButton(
+                            text = "Saved Plans",
+                            isSelected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(20.dp))
+                    
+                    // Saved Plans View - LazyColumn handles its own scrolling
+                    SavedPlansView(
+                        viewModel = viewModel,
+                        onViewPlan = { plan ->
+                            // TODO: Show plan details
+                        }
+                    )
+                }
+            }
         }
         
         if (uiState.showPlanDialog) {
@@ -108,44 +226,177 @@ fun DietPlansScreen(
             )
         }
         
-        // Show generated plan with loading indicator
+        // Show generated plan with AI animation
         if (uiState.isGenerating) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.85f))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                PrimaryIndigo.copy(alpha = 0.95f),
+                                PrimaryPurple.copy(alpha = 0.95f)
+                            )
+                        )
+                    )
                     .systemBarsPadding(),
                 contentAlignment = Alignment.Center
             ) {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(24.dp)
                 ) {
-                    CircularProgressIndicator(
-                        color = PrimaryTeal,
-                        modifier = Modifier.size(48.dp)
+                    // Animated AI icon
+                    val infiniteTransition = rememberInfiniteTransition(label = "ai_animation")
+                    val rotation by infiniteTransition.animateFloat(
+                        initialValue = 0f,
+                        targetValue = 360f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(2000, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                        ),
+                        label = "rotation"
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+                    val scale by infiniteTransition.animateFloat(
+                        initialValue = 0.8f,
+                        targetValue = 1.2f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(1000, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "scale"
+                    )
+                    
+                    Box(
+                        modifier = Modifier
+                            .size(120.dp)
+                            .graphicsLayer {
+                                rotationZ = rotation
+                                scaleX = scale
+                                scaleY = scale
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SmartToy,
+                            contentDescription = "AI Generating",
+                            tint = Color.White,
+                            modifier = Modifier.size(80.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(32.dp))
+                    
+                    // Pulsing dots animation
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    ) {
+                        repeat(3) { index ->
+                            val dotScale by infiniteTransition.animateFloat(
+                                initialValue = 0.5f,
+                                targetValue = 1f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(
+                                        durationMillis = 600,
+                                        delayMillis = index * 200,
+                                        easing = FastOutSlowInEasing
+                                    ),
+                                    repeatMode = RepeatMode.Reverse
+                                ),
+                                label = "dot_scale_$index"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .graphicsLayer {
+                                        scaleX = dotScale
+                                        scaleY = dotScale
+                                    }
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                            )
+                        }
+                    }
+                    
                     Text(
-                        text = "Generating your personalized diet plan...",
+                        text = "🤖 AI is generating your personalized diet plan...",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Analyzing your BMR: ${uiState.bmr.toInt()} kcal",
                         style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White
+                        color = Color.White.copy(alpha = 0.9f),
+                        textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "Using AI with your BMR: ${uiState.bmr.toInt()} kcal",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = PrimaryTeal.copy(alpha = 0.8f)
+                        text = "Plan Type: ${uiState.selectedPlanType.displayName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = PrimaryTeal.copy(alpha = 0.9f),
+                        textAlign = TextAlign.Center
                     )
                 }
             }
         }
         
-        // Show generated plan
+        // Show generated plan OR viewed saved plan
+        var showSaveConfirmation by remember { mutableStateOf(false) }
         if (uiState.generatedPlan.isNotEmpty() && !uiState.showPlanDialog && !uiState.isGenerating) {
             GeneratedPlanView(
                 plan = uiState.generatedPlan,
                 onClose = { viewModel.closePlan() },
-                onSave = { viewModel.savePlan() }
+                onSave = { showSaveConfirmation = true }
+            )
+        }
+        
+        // Save confirmation dialog
+        if (showSaveConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showSaveConfirmation = false },
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Save,
+                            contentDescription = null,
+                            tint = PrimaryTeal,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Text(
+                            text = "Save Diet Plan?",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                text = {
+                    Text(
+                        text = "Save this AI-generated diet plan to your saved plans?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.savePlan()
+                            showSaveConfirmation = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal)
+                    ) {
+                        Text("Save Plan")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSaveConfirmation = false }) {
+                        Text("Cancel")
+                    }
+                }
             )
         }
     }
@@ -913,8 +1164,14 @@ private fun GeneratePlanDialog(
     onGenerate: () -> Unit,
     isGenerating: Boolean
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
+    
     AlertDialog(
         onDismissRequest = if (isGenerating) ({}) else onDismiss,
+        containerColor = if (isDarkTheme) Color(0xFF1E293B) else Color.White,
+        titleContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
+        textContentColor = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1E293B),
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1005,6 +1262,203 @@ private fun GeneratePlanDialog(
 }
 
 @Composable
+private fun TabButton(
+    text: String,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(48.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = if (isSelected) PrimaryTeal else MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+        )
+    }
+}
+
+@Composable
+private fun SavedPlansView(
+    viewModel: com.kreggscode.bmr.presentation.viewmodels.DietPlansViewModel,
+    onViewPlan: (com.kreggscode.bmr.data.local.entities.DietPlan) -> Unit
+) {
+    val uiState by viewModel.uiState.collectAsState()
+    
+    if (uiState.savedPlans.isEmpty()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Restaurant,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "No Saved Plans",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = "Generate and save a plan to see it here",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            contentPadding = PaddingValues(bottom = 100.dp)
+        ) {
+            items(uiState.savedPlans) { plan ->
+                SavedPlanCard(
+                    plan = plan,
+                    isActive = plan.isActive,
+                    onActivate = {
+                        viewModel.activatePlan(plan.id)
+                    },
+                    onDelete = {
+                        viewModel.deletePlan(plan)
+                    },
+                    onView = {
+                        viewModel.viewPlan(plan)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SavedPlanCard(
+    plan: com.kreggscode.bmr.data.local.entities.DietPlan,
+    isActive: Boolean,
+    onActivate: () -> Unit,
+    onDelete: () -> Unit,
+    onView: () -> Unit
+) {
+    GlassmorphicCard(
+        modifier = Modifier.fillMaxWidth(),
+        cornerRadius = 16.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = plan.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "${plan.totalCalories.toInt()} kcal/day",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (isActive) {
+                    Surface(
+                        color = PrimaryTeal.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = "Active",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = PrimaryTeal,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Button(
+                        onClick = onView,
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryIndigo),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Visibility, 
+                            contentDescription = null, 
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            "View",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (!isActive) {
+                        Button(
+                            onClick = onActivate,
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Text(
+                                "Activate",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+                
+                // Delete icon button - clean and compact
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(
+                            Error.copy(alpha = 0.1f),
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = Error,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun FeatureItem(text: String) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1024,20 +1478,32 @@ private fun GeneratedPlanView(
     onClose: () -> Unit,
     onSave: () -> Unit
 ) {
+    val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
+    
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.98f))
+            .background(
+                if (isDarkTheme) 
+                    Color(0xFF0F172A).copy(alpha = 0.98f) // Dark background
+                else 
+                    colors.surface.copy(alpha = 0.98f)
+            )
             .systemBarsPadding(),
         contentAlignment = Alignment.Center
     ) {
+        
         Card(
             modifier = Modifier
                 .fillMaxWidth(0.95f)
                 .fillMaxHeight(0.90f),
             shape = RoundedCornerShape(24.dp),
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface
+                containerColor = if (isDarkTheme) 
+                    Color(0xFF1E293B) // Dark slate color for dark mode
+                else 
+                    Color.White
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
             border = BorderStroke(2.dp, PrimaryTeal.copy(alpha = 0.3f))
@@ -1061,23 +1527,32 @@ private fun GeneratedPlanView(
                         modifier = Modifier.weight(1f)
                     )
                     
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        IconButton(
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Prominent Save Button
+                        Button(
                             onClick = onSave,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(PrimaryTeal.copy(alpha = 0.2f))
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = PrimaryTeal,
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(44.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Save,
                                 contentDescription = "Save Plan",
-                                tint = PrimaryTeal,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Save Plan",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold
                             )
                         }
-                    IconButton(
-                        onClick = onClose,
+                        
+                        IconButton(
+                            onClick = onClose,
                         modifier = Modifier
                             .size(40.dp)
                             .clip(CircleShape)
@@ -1125,7 +1600,7 @@ private fun GeneratedPlanView(
                                           trimmed.matches(Regex("^\\*\\*.*\\*\\*$"))
                             
                             if (isHeading) {
-                    Text(
+                                Text(
                                     text = trimmed.replace("#", "").trim(),
                                     style = MaterialTheme.typography.titleLarge,
                                     fontWeight = FontWeight.Bold,
@@ -1136,10 +1611,13 @@ private fun GeneratedPlanView(
                                 Text(
                                     text = trimmed,
                                     style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
+                                    color = if (isDarkTheme) 
+                                        Color(0xFFE2E8F0) // Light text for dark background
+                                    else 
+                                        Color(0xFF1E293B), // Dark text for light background
                                     lineHeight = 28.sp,
                                     modifier = Modifier.padding(vertical = 6.dp)
-                    )
+                                )
                             }
                         }
                     }

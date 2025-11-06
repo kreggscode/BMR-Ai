@@ -26,8 +26,21 @@ class DietPlansViewModel @Inject constructor(
     
     init {
         loadUserData()
+        loadSavedPlans()
         // Initialize shopping list with default plan
         _uiState.update { it.copy(shoppingList = getShoppingListForPlan(DietPlanType.WEIGHT_LOSS)) }
+    }
+    
+    private fun loadSavedPlans() {
+        viewModelScope.launch {
+            userDao.getCurrentUser().collect { user ->
+                user?.let { profile ->
+                    dietPlanDao.getDietPlansByUser(profile.id).collect { plans ->
+                        _uiState.update { it.copy(savedPlans = plans) }
+                    }
+                }
+            }
+        }
     }
     
     private fun loadUserData() {
@@ -225,10 +238,49 @@ class DietPlansViewModel @Inject constructor(
         _uiState.update { it.copy(generatedPlan = "") }
     }
     
+    fun activatePlan(planId: Long) {
+        viewModelScope.launch {
+            val user = userDao.getCurrentUser().firstOrNull() ?: return@launch
+            dietPlanDao.deactivateAllPlans(user.id)
+            dietPlanDao.activatePlan(planId)
+        }
+    }
+    
+    fun deletePlan(plan: DietPlan) {
+        viewModelScope.launch {
+            dietPlanDao.deleteDietPlan(plan)
+        }
+    }
+    
+    fun viewPlan(plan: DietPlan) {
+        // Extract plan content from JSON
+        try {
+            val json = org.json.JSONObject(plan.daysJson)
+            val planContent = json.optString("plan", "")
+            _uiState.update { 
+                it.copy(
+                    generatedPlan = planContent,
+                    selectedPlanType = DietPlanType.values().find { 
+                        it.name == json.optString("planType", "WEIGHT_LOSS") 
+                    } ?: DietPlanType.WEIGHT_LOSS
+                )
+            }
+        } catch (e: Exception) {
+            // If JSON parsing fails, try to use daysJson directly
+            _uiState.update { 
+                it.copy(generatedPlan = plan.daysJson) 
+            }
+        }
+    }
+    
     fun savePlan() {
         viewModelScope.launch {
             val user = userDao.getCurrentUser().firstOrNull() ?: return@launch
             val state = _uiState.value
+            
+            if (state.generatedPlan.isEmpty()) {
+                return@launch
+            }
             
             if (state.generatedPlan.isNotEmpty()) {
                 // Deactivate all existing plans
@@ -262,6 +314,9 @@ class DietPlansViewModel @Inject constructor(
                 )
                 
                 dietPlanDao.insertDietPlan(dietPlan)
+                
+                // Reload saved plans to show the new one
+                loadSavedPlans()
                 
                 _uiState.update { 
                     it.copy(
@@ -483,7 +538,8 @@ data class DietPlansUiState(
     val isGenerating: Boolean = false,
     val showPlanDialog: Boolean = false,
     val shoppingList: Map<String, List<String>> = emptyMap(),
-    val saveSuccess: Boolean = false
+    val saveSuccess: Boolean = false,
+    val savedPlans: List<DietPlan> = emptyList()
 )
 
 enum class DietPlanType(val displayName: String) {

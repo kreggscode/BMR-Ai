@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -51,7 +52,7 @@ fun GlassmorphicCard(
                 modifier = Modifier
                     .matchParentSize()
                     .background(
-                        if (isDarkTheme) colors.surface.copy(alpha = 0.55f)
+                        if (isDarkTheme) colors.surface.copy(alpha = 0.95f)
                         else colors.surface.copy(alpha = 0.92f)
                     )
             )
@@ -207,18 +208,57 @@ fun FloatingBottomNavBar(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
+    val isDarkTheme = colors.background.luminance() < 0.5f
     
-    GlassmorphicCard(
+    Box(
         modifier = modifier
             .padding(horizontal = 20.dp)
             .padding(bottom = 20.dp)
             .fillMaxWidth()
-            .height(65.dp),
-        cornerRadius = 32.dp,
-        borderWidth = 1.dp,
-        blurRadius = 20.dp,
-        removePadding = true
+            .height(65.dp)
+            .clip(RoundedCornerShape(32.dp))
     ) {
+        // Glassmorphism effect with less transparency (but still glassmorphic)
+        Cloudy(
+            radius = 20,
+            modifier = Modifier.matchParentSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(
+                        if (isDarkTheme) 
+                            colors.surface.copy(alpha = 0.92f) // Less transparent but still glassmorphic
+                        else 
+                            colors.surface.copy(alpha = 0.90f)
+                    )
+            )
+        }
+        
+        // More visible border to distinguish it
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .border(
+                    width = 2.dp,
+                    brush = Brush.linearGradient(
+                        colors = if (isDarkTheme) {
+                            listOf(
+                                colors.outline.copy(alpha = 0.5f),
+                                colors.outline.copy(alpha = 0.3f)
+                            )
+                        } else {
+                            listOf(
+                                colors.outline.copy(alpha = 0.4f),
+                                colors.outline.copy(alpha = 0.25f)
+                            )
+                        }
+                    ),
+                    shape = RoundedCornerShape(32.dp)
+                )
+        )
+        
+        // Content
         Row(
             modifier = Modifier.fillMaxSize(),
             horizontalArrangement = Arrangement.SpaceEvenly,

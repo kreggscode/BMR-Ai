@@ -635,15 +635,92 @@ private fun ScanResults(
             color = MaterialTheme.colorScheme.onBackground
         )
         
-        uiState.recognizedFoods.forEach { food ->
+        uiState.recognizedFoods.forEachIndexed { index, food ->
+            var showEditDialog by remember { mutableStateOf(false) }
+            var editedName by remember { mutableStateOf(food.name) }
+            
             FoodResultCard(
                 food = food,
                 onConfirm = { viewModel.confirmFood(food) },
-                onEdit = { /* TODO: Implement edit */ }
+                onEdit = { showEditDialog = true }
             )
+            
+            if (showEditDialog) {
+                AlertDialog(
+                    onDismissRequest = { showEditDialog = false },
+                    title = {
+                        Text(
+                            text = "Edit Food Name",
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        OutlinedTextField(
+                            value = editedName,
+                            onValueChange = { editedName = it },
+                            label = { Text("Food Name") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                if (editedName.isNotBlank()) {
+                                    viewModel.updateFoodName(index, editedName)
+                                    showEditDialog = false
+                                }
+                            }
+                        ) {
+                            Text("Save")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showEditDialog = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
         }
         
         // Action Buttons
+        var showSaveConfirmation by remember { mutableStateOf(false) }
+        
+        if (showSaveConfirmation) {
+            AlertDialog(
+                onDismissRequest = { showSaveConfirmation = false },
+                title = {
+                    Text(
+                        text = "Save Food Log?",
+                        fontWeight = FontWeight.Bold
+                    )
+                },
+                text = {
+                    Text(
+                        text = "Add ${uiState.recognizedFoods.size} item(s) to your food log?",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.saveAllFoods()
+                            showSaveConfirmation = false
+                            navController.navigateUp()
+                        }
+                    ) {
+                        Text("Save")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showSaveConfirmation = false }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+        
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()

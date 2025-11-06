@@ -21,6 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
 import com.kreggscode.bmr.Screen
 import com.kreggscode.bmr.presentation.viewmodels.TimePeriod
@@ -36,6 +39,11 @@ fun ProgressScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scrollState = rememberScrollState()
+    
+    // Refresh data when screen is focused
+    LaunchedEffect(Unit) {
+        viewModel.refreshData()
+    }
     
     Box(
         modifier = Modifier
@@ -66,9 +74,11 @@ fun ProgressScreen(
             Spacer(modifier = Modifier.height(24.dp))
             
             // Calorie Progress Circle
+            // Show appropriate calories based on period:
+            // WEEK: weekly average, MONTH: monthly average, YEAR: yearly average
             CalorieProgressCircle(
                 progress = uiState.progress,
-                caloriesConsumed = if (uiState.selectedPeriod == TimePeriod.WEEK) uiState.todayCalories else uiState.avgCalories,
+                caloriesConsumed = uiState.avgCalories, // Now always shows period average
                 caloriesGoal = uiState.targetCalories,
                 deficit = uiState.deficit,
                 burned = uiState.burned,
@@ -81,6 +91,7 @@ fun ProgressScreen(
             // Stats Grid
             ProgressStatsGrid(
                 weightLost = uiState.weightLost,
+                currentWeight = uiState.currentWeight,
                 streak = uiState.streak,
                 waterAvg = uiState.waterAvg,
                 sleepAvg = uiState.sleepAvg,
@@ -108,6 +119,81 @@ fun ProgressScreen(
             
             // Achievements
             AchievementsSection()
+        }
+        
+        // Weight Dialog
+        if (uiState.showWeightDialog) {
+            WeightInputDialog(
+                currentWeight = uiState.currentWeight,
+                onDismiss = { viewModel.toggleWeightDialog(false) },
+                onConfirm = { weight ->
+                    viewModel.updateWeight(weight)
+                    viewModel.toggleWeightDialog(false)
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun WeightInputDialog(
+    currentWeight: Double,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    var weightText by remember { mutableStateOf(if (currentWeight > 0) currentWeight.toString() else "") }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        GlassmorphicCard(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .padding(16.dp),
+            cornerRadius = 24.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Update Weight",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                OutlinedTextField(
+                    value = weightText,
+                    onValueChange = { weightText = it },
+                    label = { Text("Weight (kg)") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = {
+                            val weight = weightText.toDoubleOrNull() ?: 0.0
+                            if (weight > 0) {
+                                onConfirm(weight)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryTeal)
+                    ) {
+                        Text("Save")
+                    }
+                }
+            }
         }
     }
 }
@@ -393,13 +479,23 @@ private fun CalorieStat(
 @Composable
 private fun ProgressStatsGrid(
     weightLost: Double,
+    currentWeight: Double,
     streak: Int,
     waterAvg: Int,
     sleepAvg: Int,
     onSleepClick: () -> Unit = {}
 ) {
+    // Show weight change if available, otherwise show current weight
+    val weightDisplay = if (weightLost > 0) {
+        "-${String.format("%.1f", weightLost)}"
+    } else if (currentWeight > 0) {
+        "${String.format("%.1f", currentWeight)}"
+    } else {
+        "--"
+    }
+    
     val stats = listOf(
-        ProgressStat("Weight Change", if (weightLost > 0) "-${String.format("%.1f", weightLost)}" else "--", "kg", Icons.Default.TrendingDown, if (weightLost > 0) Success else MaterialTheme.colorScheme.onSurfaceVariant, onClick = null),
+        ProgressStat("Weight Change", weightDisplay, "kg", Icons.Default.TrendingDown, if (weightLost > 0) Success else if (currentWeight > 0) PrimaryTeal else MaterialTheme.colorScheme.onSurfaceVariant, onClick = null),
         ProgressStat("Logging Streak", if (streak > 0) streak.toString() else "--", "days", Icons.Default.LocalFireDepartment, if (streak > 0) AccentCoral else MaterialTheme.colorScheme.onSurfaceVariant, onClick = null),
         ProgressStat("Sleep Avg", if (sleepAvg > 0) "$sleepAvg" else "--", "hrs", Icons.Default.Bedtime, PrimaryIndigo, onClick = onSleepClick),
         ProgressStat("Water Intake", if (waterAvg > 0) waterAvg.toString() else "--", "glasses", Icons.Default.WaterDrop, AccentSky, onClick = null)
@@ -520,7 +616,7 @@ private fun WeightProgressChart(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                IconButton(onClick = { /* TODO: Navigate to weight entry */ }) {
+                IconButton(onClick = { viewModel.toggleWeightDialog(true) }) {
                     Icon(
                         Icons.Default.Add,
                         contentDescription = "Add Weight",

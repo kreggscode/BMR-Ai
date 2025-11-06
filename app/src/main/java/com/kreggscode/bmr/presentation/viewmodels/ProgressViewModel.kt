@@ -6,6 +6,7 @@ import com.kreggscode.bmr.data.local.dao.BMRDao
 import com.kreggscode.bmr.data.local.dao.FoodDao
 import com.kreggscode.bmr.data.local.dao.SleepDao
 import com.kreggscode.bmr.data.local.dao.UserDao
+import com.kreggscode.bmr.data.local.dao.WaterDao
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -17,7 +18,8 @@ class ProgressViewModel @Inject constructor(
     private val userDao: UserDao,
     private val bmrDao: BMRDao,
     private val foodDao: FoodDao,
-    private val sleepDao: SleepDao
+    private val sleepDao: SleepDao,
+    private val waterDao: WaterDao
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(ProgressUiState())
@@ -26,6 +28,12 @@ class ProgressViewModel @Inject constructor(
     init {
         loadProgressData()
         loadUserWeight()
+    }
+    
+    fun refreshData() {
+        // Force reload by updating period (triggers recalculation)
+        val currentPeriod = _uiState.value.selectedPeriod
+        selectPeriod(currentPeriod)
     }
     
     private fun loadProgressData() {
@@ -104,14 +112,28 @@ class ProgressViewModel @Inject constructor(
                         val todayMeals = meals.filter { it.date >= today }
                         val todayCalories = todayMeals.sumOf { it.caloriesCalculated }
                         
-                        // Calculate progress based on period - use today for week, average for month/year
+                        // Calculate progress based on period
+                        // For WEEK: show weekly average (total calories / 7 days)
+                        // For MONTH: show monthly average (total calories / 30 days)
+                        // For YEAR: show yearly average (total calories / 365 days)
                         val caloriesForProgress = when (period) {
-                            TimePeriod.WEEK -> todayCalories
-                            else -> avgCalories
+                            TimePeriod.WEEK -> {
+                                // Weekly: show average of last 7 days
+                                val weekAvg = if (days > 0) totalCalories / days else 0.0
+                                weekAvg
+                            }
+                            TimePeriod.MONTH -> {
+                                // Monthly: show average of last 30 days
+                                avgCalories
+                            }
+                            TimePeriod.YEAR -> {
+                                // Yearly: show average of last 365 days
+                                avgCalories
+                            }
                         }
                         val progress = (caloriesForProgress / targetCalories).toFloat().coerceIn(0f, 1f)
                         
-                        // Calculate deficit/surplus (for today when week is selected)
+                        // Calculate deficit/surplus based on period
                         val deficit = targetCalories - caloriesForProgress
                         
                         // Get macros
@@ -142,6 +164,9 @@ class ProgressViewModel @Inject constructor(
                         val burned = bmr.toInt()
                         val active = (tdee - bmr).toInt().coerceAtLeast(0)
                         
+                        // Calculate water average for the period
+                        val waterAvg = calculateWaterAverage(profile.id, startDate, endDate, days)
+                        
                         _uiState.update { state ->
                             state.copy(
                                 avgCalories = avgCalories.toInt(),
@@ -159,7 +184,7 @@ class ProgressViewModel @Inject constructor(
                                 fatTarget = fatTarget.toInt(),
                                 weightLost = calculateWeightLoss(profile.id),
                                 streak = calculateStreak(profile.id),
-                                waterAvg = 0, // Water intake tracked separately in WaterTrackingScreen
+                                waterAvg = waterAvg,
                                 sleepAvg = calculateSleepAverage(profile.id)
                             )
                         }
@@ -170,19 +195,27 @@ class ProgressViewModel @Inject constructor(
     }
     
     private suspend fun calculateWeightLoss(userId: Long): Double {
-        // Get user's current weight and start weight from state
+        // Get user's current weight
         val user = userDao.getCurrentUser().firstOrNull() ?: return 0.0
         val currentWeight = user.weightKg
         
-        // Get start weight from first BMR record or use current if no start weight
-        val firstBMR = bmrDao.getLatestBMRRecord(userId).firstOrNull()
-        val startWeight = firstBMR?.let {
-            // Try to get initial weight from when BMR was calculated
-            // For now, we'll use the current weight as start if no history
+        // Get all BMR records to find the earliest one (starting weight)
+        val allBMRRecords = bmrDao.getUserBMRRecords(userId).first()
+        val startWeight = if (allBMRRecords.isNotEmpty()) {
+            // Use the weight from the oldest BMR record as start weight
+            // The user's weight at the time of first BMR calculation
+            val oldestBMR = allBMRRecords.last() // Records are ordered DESC, so last is oldest
+            // Get the user's weight when this BMR was calculated
+            // Since we don't store historical weights, use current weight if it's > 0
+            // Otherwise, we'll track it from the user profile which gets updated when BMR is saved
+            currentWeight // This will be updated when BMR is calculated
+        } else {
             currentWeight
-        } ?: currentWeight
+        }
         
         // Calculate actual weight loss (start - current)
+        // For now, if no weight history exists, return 0
+        // Weight loss tracking requires storing historical weight data
         if (startWeight > 0 && currentWeight > 0 && startWeight > currentWeight) {
             return startWeight - currentWeight
         }
@@ -238,8 +271,92 @@ class ProgressViewModel @Inject constructor(
             set(Calendar.MILLISECOND, 999)
         }.timeInMillis
         
+        // First try to get today's sleep if available (most recent)
+        val today = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        
+        val todayRecord = sleepDao.getSleepRecordByDate(userId, today)
+        if (todayRecord != null && todayRecord.sleepHours > 0) {
+            // For weekly view, prefer showing today's hours
+            return todayRecord.sleepHours.toInt()
+        }
+        
+        // Otherwise calculate average
         val avgSleep = sleepDao.getAverageSleepHours(userId, sevenDaysAgo, todayEnd)
         return avgSleep?.toInt() ?: 0
+    }
+    
+    private suspend fun calculateWaterAverage(userId: Long, startDate: Long, endDate: Long, days: Int): Int {
+        try {
+            // First try to get today's water intake (most recent)
+            val today = Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+            
+            val todayRecord = waterDao.getWaterIntakeByDate(userId, today)
+            if (todayRecord != null && todayRecord.glasses > 0) {
+                // For WEEK period, show today's glasses directly
+                // For other periods, calculate average
+                if (days == 7) {
+                    return todayRecord.glasses
+                }
+            }
+            
+            // Get water records for the date range
+            val waterRecords = waterDao.getWaterIntakeByDateRange(userId, startDate, endDate).first()
+            
+            if (waterRecords.isEmpty()) {
+                // If no records in range, try today as fallback
+                if (todayRecord != null) {
+                    android.util.Log.d("ProgressViewModel", "Using today's water: ${todayRecord.glasses} glasses")
+                    return todayRecord.glasses
+                }
+                android.util.Log.d("ProgressViewModel", "No water records found")
+                return 0
+            }
+            
+            // Calculate total glasses and average
+            val totalGlasses = waterRecords.sumOf { it.glasses }
+            val avgGlasses = if (days > 0 && days <= 7) {
+                // For weekly view, prefer showing today if available
+                if (todayRecord != null && todayRecord.glasses > 0) {
+                    todayRecord.glasses
+                } else {
+                    (totalGlasses.toDouble() / days).toInt()
+                }
+            } else if (days > 0) {
+                // For monthly/yearly, calculate average
+                (totalGlasses.toDouble() / days).toInt()
+            } else {
+                // If no days specified, return total glasses
+                totalGlasses
+            }
+            
+            android.util.Log.d("ProgressViewModel", "Water calculated: $avgGlasses glasses from ${waterRecords.size} records over $days days")
+            return avgGlasses
+        } catch (e: Exception) {
+            android.util.Log.e("ProgressViewModel", "Error calculating water average", e)
+            // Try to get today's water as last resort
+            try {
+                val today = Calendar.getInstance().apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                val todayRecord = waterDao.getWaterIntakeByDate(userId, today)
+                return todayRecord?.glasses ?: 0
+            } catch (ex: Exception) {
+                return 0
+            }
+        }
     }
     
     fun loadUserWeight() {
@@ -248,15 +365,22 @@ class ProgressViewModel @Inject constructor(
                 user?.let { profile ->
                     val currentWeight = profile.weightKg
                     
-                    // Get start weight - use first weight entry or current weight
-                    // For now, we'll track start weight from first BMR calculation
-                    // In a real app, you'd have a weight history table
-                    val startWeight = if (_uiState.value.startWeight == 0.0) {
-                        currentWeight // Use current as start if no start weight set
-                    } else {
+                    // Get start weight from the first BMR calculation
+                    // When BMR is first calculated, we store that weight as the starting point
+                    val allBMRRecords = bmrDao.getUserBMRRecords(profile.id).first()
+                    val startWeight = if (allBMRRecords.isNotEmpty() && _uiState.value.startWeight == 0.0) {
+                        // Use current weight as start weight if this is the first time loading
+                        // The start weight should be set when the first BMR is calculated
+                        currentWeight
+                    } else if (_uiState.value.startWeight > 0) {
+                        // Keep existing start weight if already set
                         _uiState.value.startWeight
+                    } else {
+                        // If no start weight is set, use current weight
+                        currentWeight
                     }
                     
+                    // Calculate weight loss (start - current, positive means weight lost)
                     val weightLost = if (startWeight > 0 && currentWeight > 0 && startWeight > currentWeight) {
                         startWeight - currentWeight
                     } else {
@@ -273,6 +397,26 @@ class ProgressViewModel @Inject constructor(
                 }
             }
         }
+    }
+    
+    fun updateWeight(newWeight: Double) {
+        viewModelScope.launch {
+            val user = userDao.getCurrentUser().firstOrNull()
+            user?.let { profile ->
+                val updatedUser = profile.copy(
+                    weightKg = newWeight,
+                    updatedAt = System.currentTimeMillis()
+                )
+                userDao.updateUser(updatedUser)
+                
+                // Reload weight data
+                loadUserWeight()
+            }
+        }
+    }
+    
+    fun toggleWeightDialog(show: Boolean) {
+        _uiState.update { it.copy(showWeightDialog = show) }
     }
 }
 
@@ -296,7 +440,8 @@ data class ProgressUiState(
     val carbsCurrent: Int = 0,
     val carbsTarget: Int = 0,
     val fatCurrent: Int = 0,
-    val fatTarget: Int = 0
+    val fatTarget: Int = 0,
+    val showWeightDialog: Boolean = false
 )
 
 enum class TimePeriod(val label: String) {
